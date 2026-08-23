@@ -544,7 +544,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: -0.002
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalPosition.y
@@ -552,23 +552,23 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0
+      value: 0.079
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 1
+      value: 0.9998455
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0
+      value: -0.017578524
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -576,11 +576,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: -2.014
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -7050815565049190228, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -3571207886005413243, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_IsActive
@@ -589,6 +593,10 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_Name
       value: Spider-Gwen
+      objectReference: {fileID: 0}
+    - target: {fileID: 1178379993702736528, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -689,7 +697,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: e22f70e50dd5eb448b2ad16fb5a7cab3, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

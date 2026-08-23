@@ -3,10 +3,75 @@ guid: 6b64f9be2ca1a794cad5c58fc4b19371
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_01
+    second: {fileID: 2100000, guid: 1d31a6d10d1a240479ab3e95d3d3edce, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_03
+    second: {fileID: 2100000, guid: 631a15031ccd03c42afc7ab6339a0b63, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_04
+    second: {fileID: 2100000, guid: f308819bf88ad8e4aa6be58339ba9343, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_05
+    second: {fileID: 2100000, guid: c6d574d5a3662664884ac9f6538d2dad, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_06
+    second: {fileID: 2100000, guid: d1a2b3c4e5f6789012345678abcdef01, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_head02_face
+    second: {fileID: 2100000, guid: d2b3c4d5e6f7890123456789abcdef02, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_head02_hair
+    second: {fileID: 2100000, guid: d3c4d5e6f708901234567890abcdef03, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_head02_Hood_1
+    second: {fileID: 2100000, guid: d4d5e6f708192a3b4c5d6e7f8a9b0c14, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_head02_Hood_2
+    second: {fileID: 2100000, guid: d5e6f708192a3b4c5d6e7f8a9b0c1d25, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_body_pink
+    second: {fileID: 2100000, guid: e1a2b3c4d5e6f708192a3b4c5d6e7f80, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_body_white
+    second: {fileID: 2100000, guid: e2b3c4d5e6f708192a3b4c5d6e7f8191, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_body_wristband
+    second: {fileID: 2100000, guid: e3c4d5e6f708192a3b4c5d6e7f8192a2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_s03_body_black
+    second: {fileID: 2100000, guid: e4d5e6f708192a3b4c5d6e7f8193b3c3, type: 2}
   materials:
     materialImportMode: 2
-    materialName: 0
+    materialName: 1
     materialSearch: 1
     materialLocation: 1
   animations:
