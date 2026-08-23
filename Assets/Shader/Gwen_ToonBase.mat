@@ -12,7 +12,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _LAMBERTPERTURBMODE_ADD
+  - _LAMBERTPERTURBMODE_MULTIPLY
   - _LAMBERTPERTURBSPACE_OBJECT
   - _LAMBERT_PERTURB_ON
   - _LAMBERT_PERTURB_SWAP_UV
@@ -32,7 +32,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _LambertPerturbMap:
-        m_Texture: {fileID: 2800000, guid: 2fd555817b1f19c4b9816050cc6a576b, type: 3}
+        m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -40,14 +40,14 @@ Material:
     - _AmbientStrength: 0.77
     - _Cull: 2
     - _LambertPerturbDebug: 0
-    - _LambertPerturbMode: 0
+    - _LambertPerturbMode: 1
     - _LambertPerturbOn: 1
     - _LambertPerturbSpace: 1
-    - _LambertPerturbStrength: 0.64
+    - _LambertPerturbStrength: 2.34
     - _LambertPerturbSwapUV: 1
-    - _LambertPerturbWidth: 0.254
-    - _ShadeSmooth: 0
-    - _ShadeThreshold: 0.294
+    - _LambertPerturbWidth: 0.527
+    - _ShadeSmooth: 0.054
+    - _ShadeThreshold: 0.5
     - _SpecularSize: 43
     - _SpecularSmooth: 0.243
     - _SpecularThreshold: 0.548

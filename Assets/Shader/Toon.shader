@@ -26,7 +26,7 @@ Shader "Custom/Toon"
         [KeywordEnum(Add, Multiply)] _LambertPerturbMode ("Perturb Mode", Float) = 0
         [Toggle(_LAMBERT_PERTURB_SWAP_UV)] _LambertPerturbSwapUV ("Swap Perturb UV", Float) = 0
         _LambertPerturbMap ("Perturb Map", 2D) = "gray" {}
-        _LambertPerturbStrength ("Perturb Strength", Range(0, 2)) = 0.5
+        _LambertPerturbStrength ("Perturb Strength", Range(0, 10)) = 0.5
         _LambertPerturbWidth ("Perturb Width", Range(0.01, 1)) = 0.2
 
         [Header(Surface)]
