@@ -6,9 +6,12 @@
 
 TEXTURE2D(_TriplanarMap);
 SAMPLER(sampler_TriplanarMap);
+TEXTURE2D(_UVMap);
+SAMPLER(sampler_UVMap);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _TriplanarMap_ST;
+    float4 _UVMap_ST;
     half4 _ColorX;
     half4 _ColorY;
     half4 _ColorZ;
@@ -17,6 +20,7 @@ CBUFFER_START(UnityPerMaterial)
     half _ShadeThreshold;
     half _ShadeSmooth;
     half _AmbientStrength;
+    half _OutputOverlayMap;
 CBUFFER_END
 
 #endif

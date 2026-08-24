@@ -10,14 +10,24 @@ Shader "Custom/Toon"
         _ShadeThreshold ("Shade Threshold", Range(0, 1)) = 0.45
         _ShadeSmooth ("Shade Smooth", Range(0, 0.5)) = 0.02
 
-        [Header(Specular)]
-        [HDR] _SpecularColor ("Specular Color", Color) = (1, 1, 1, 1)
-        _SpecularSize ("Specular Size", Range(2, 256)) = 64
-        _SpecularThreshold ("Specular Threshold", Range(0, 1)) = 0.5
-        _SpecularSmooth ("Specular Smooth", Range(0, 0.5)) = 0.02
+        [Header(Wrap Toon Layer)]
+        _WrapShadeColor ("Wrap Shade Color", Color) = (0.4, 0.4, 0.5, 1)
+        _WrapShadeThreshold ("Wrap Shade Threshold", Range(0, 1)) = 0.45
+        _WrapShadeSmooth ("Wrap Shade Smooth", Range(0, 0.5)) = 0.02
+        _WrapAmount ("Wrap Amount", Range(0, 1)) = 0.5
+        _WrapToonStrength ("Wrap Toon Strength", Range(0, 1)) = 0
+        [Toggle(_OUTPUT_WRAP_TOON)] _OutputWrapToon ("Output Wrap Toon", Float) = 0
 
         [Header(Ambient)]
         _AmbientStrength ("Ambient Strength", Range(0, 2)) = 0.35
+
+        [Header(UV Map)]
+        _UVMap ("UV Map", 2D) = "white" {}
+        _OverlayColorA ("UV Map Color A", Color) = (0, 0, 0, 1)
+        _OverlayColorB ("UV Map Color B", Color) = (1, 1, 1, 1)
+        [KeywordEnum(Multiply, Add)] _OverlayBlendMode ("UV Map Blend Mode", Float) = 0
+        _OverlayBlendStrength ("UV Map Blend Strength", Range(0, 1)) = 0
+        [Toggle(_OUTPUT_OVERLAY_MAP)] _OutputOverlayMap ("Output UV Map", Float) = 0
 
         [Header(Lambert Perturb)]
         [Toggle(_LAMBERT_PERTURB_ON)] _LambertPerturbOn ("Enable Lambert Perturb", Float) = 0
@@ -57,6 +67,9 @@ Shader "Custom/Toon"
             #pragma fragment ToonFrag
 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            #pragma multi_compile _ _FORWARD_PLUS
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
@@ -65,6 +78,9 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _LAMBERTPERTURBSPACE_WORLD _LAMBERTPERTURBSPACE_OBJECT
             #pragma shader_feature_local _LAMBERTPERTURBMODE_ADD _LAMBERTPERTURBMODE_MULTIPLY
             #pragma shader_feature_local _LAMBERT_PERTURB_SWAP_UV
+            #pragma shader_feature_local _OUTPUT_OVERLAY_MAP
+            #pragma shader_feature_local _OUTPUT_WRAP_TOON
+            #pragma shader_feature_local _OVERLAYBLENDMODE_MULTIPLY _OVERLAYBLENDMODE_ADD
 
             #include "ToonInput.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -81,9 +97,10 @@ Shader "Custom/Toon"
             {
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
-                float3 positionWS : TEXCOORD1;
-                float3 normalWS : TEXCOORD2;
-                float fogFactor : TEXCOORD3;
+                float2 uvMap : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
+                float3 normalWS : TEXCOORD3;
+                float fogFactor : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -127,18 +144,18 @@ Shader "Custom/Toon"
                 return SAMPLE_TEXTURE2D(_LambertPerturbMap, sampler_LambertPerturbMap, perturbUV);
             }
 
-            // Only affect a band around the cel shade threshold.
-            half TerminatorBandMask(half NdotL)
+            // Only affect a band around the given cel shade threshold.
+            half TerminatorBandMask(half NdotL, half threshold)
             {
                 half width = max(_LambertPerturbWidth, HALF_MIN);
-                half dist = abs(NdotL - _ShadeThreshold);
+                half dist = abs(NdotL - threshold);
                 return saturate(1.0h - dist / width);
             }
 
             // Perturb the post-cel (binarized) lit mask. The sample itself is not cel-filtered.
-            half ApplyLitMaskPerturb(half litMask, half NdotL, half perturbSample)
+            half ApplyLitMaskPerturb(half litMask, half NdotL, half perturbSample, half threshold)
             {
-                half mask = TerminatorBandMask(NdotL);
+                half mask = TerminatorBandMask(NdotL, threshold);
                 half amount = _LambertPerturbStrength * mask;
 
             #if defined(_LAMBERTPERTURBMODE_MULTIPLY)
@@ -164,33 +181,90 @@ Shader "Custom/Toon"
                 output.positionWS = posInputs.positionWS;
                 output.normalWS = normalInputs.normalWS;
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.uvMap = TRANSFORM_TEX(input.uv, _UVMap);
                 output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
                 return output;
             }
 
-            half3 ToonLighting(Light light, half3 albedo, half3 normalWS, half3 viewDirWS)
+            half EvaluateLitMask(Light light, half3 normalWS, half threshold, half smoothness)
             {
                 half NdotL = saturate(dot(normalWS, light.direction));
                 half attenuation = light.distanceAttenuation * light.shadowAttenuation;
-
-                // Binarize Lambert first, then perturb the cel result (perturb bypasses CelStep).
-                half litMask = CelStep(NdotL * attenuation, _ShadeThreshold, _ShadeSmooth);
+                half litMask = CelStep(NdotL * attenuation, threshold, smoothness);
 
             #if defined(_LAMBERT_PERTURB_ON)
                 half perturbSample = SampleLambertPerturbMap(normalWS, light.direction).r;
-                litMask = ApplyLitMaskPerturb(litMask, NdotL, perturbSample);
+                litMask = ApplyLitMaskPerturb(litMask, NdotL, perturbSample, threshold);
             #endif
+                return litMask;
+            }
 
+            // Wrap toon lit mask: wrap Lambert first, then cel + same perturb.
+            half EvaluateWrapToonLitMask(Light light, half3 normalWS)
+            {
+                half NdotL = dot(normalWS, light.direction);
+                half wrap = _WrapAmount;
+                half wrapped = saturate((NdotL + wrap) / (1.0h + wrap));
+                half attenuation = light.distanceAttenuation * light.shadowAttenuation;
+                half litMask = CelStep(wrapped * attenuation, _WrapShadeThreshold, _WrapShadeSmooth);
+
+            #if defined(_LAMBERT_PERTURB_ON)
+                half perturbSample = SampleLambertPerturbMap(normalWS, light.direction).r;
+                litMask = ApplyLitMaskPerturb(litMask, wrapped, perturbSample, _WrapShadeThreshold);
+            #endif
+                return litMask;
+            }
+
+            // Pure wrap-toon factor (no albedo, no light.color) for multiply onto final color.
+            half3 EvaluateWrapToonFactor(half wrapLitMask)
+            {
+                return lerp(_WrapShadeColor.rgb, half3(1.0h, 1.0h, 1.0h), saturate(wrapLitMask));
+            }
+
+            half3 BlendMultiplyLayer(half3 baseColor, half3 layerColor, half strength)
+            {
+                return lerp(baseColor, baseColor * layerColor, saturate(strength));
+            }
+
+            // Main light owns shade/lit lerp so shade color is applied once.
+            half3 ToonLightingMain(Light light, half3 albedo, half3 normalWS)
+            {
+                half litMask = EvaluateLitMask(light, normalWS, _ShadeThreshold, _ShadeSmooth);
                 half3 diffuse = lerp(_ShadeColor.rgb * albedo, albedo, litMask);
+                return diffuse * light.color;
+            }
 
-                half3 halfDir = SafeNormalize(light.direction + viewDirWS);
-                half NdotH = saturate(dot(normalWS, halfDir));
-                half spec = pow(NdotH, max(_SpecularSize, 1.0h));
-                spec = CelStep(spec * attenuation, _SpecularThreshold, _SpecularSmooth);
+            // Additional lights only add lit contribution (no shade base).
+            half3 ToonLightingAdditional(Light light, half3 albedo, half3 normalWS)
+            {
+                half litMask = EvaluateLitMask(light, normalWS, _ShadeThreshold, _ShadeSmooth);
+                return albedo * light.color * litMask;
+            }
 
-                half3 color = diffuse * light.color;
-                color += _SpecularColor.rgb * light.color * spec;
-                return color;
+            void InitializeToonInputData(Varyings input, half3 normalWS, half3 viewDirWS, out InputData inputData)
+            {
+                inputData = (InputData)0;
+                inputData.positionWS = input.positionWS;
+                inputData.positionCS = input.positionCS;
+                inputData.normalWS = normalWS;
+                inputData.viewDirectionWS = viewDirWS;
+                inputData.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
+                inputData.shadowMask = half4(1.0h, 1.0h, 1.0h, 1.0h);
+            }
+
+            // Map sample drives lerp between Color A/B, then that color is blended onto the result.
+            half3 BlendOverlayMap(half3 baseColor, half4 mapSample, half strength)
+            {
+                half t = mapSample.r;
+                half3 tintColor = lerp(_OverlayColorA.rgb, _OverlayColorB.rgb, t);
+
+            #if defined(_OVERLAYBLENDMODE_ADD)
+                half3 blended = baseColor + tintColor;
+            #else
+                half3 blended = baseColor * tintColor;
+            #endif
+                return lerp(baseColor, blended, saturate(strength));
             }
 
             half4 ToonFrag(Varyings input) : SV_Target
@@ -198,6 +272,12 @@ Shader "Custom/Toon"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
+                half4 uvMapSample = SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uvMap);
+
+            #if defined(_OUTPUT_OVERLAY_MAP)
+                // Direct output: sample with model UV only.
+                return uvMapSample;
+            #else
                 half3 normalWS = NormalizeNormalPerPixel(input.normalWS);
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS));
 
@@ -210,10 +290,51 @@ Shader "Custom/Toon"
                 half alpha = baseSample.a * _BaseColor.a;
 
                 half3 viewDirWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
-                half3 color = ToonLighting(mainLight, albedo, normalWS, viewDirWS);
+                half3 color = ToonLightingMain(mainLight, albedo, normalWS);
                 color += SampleSH(normalWS) * albedo * _AmbientStrength;
+
+                // Combine wrap-toon lit masks across lights (any light can open the lit side).
+                half wrapLitMask = EvaluateWrapToonLitMask(mainLight, normalWS);
+
+            #if defined(_ADDITIONAL_LIGHTS)
+                InputData inputData;
+                InitializeToonInputData(input, normalWS, viewDirWS, inputData);
+                half4 shadowMask = inputData.shadowMask;
+                AmbientOcclusionFactor aoFactor = (AmbientOcclusionFactor)0;
+                aoFactor.directAmbientOcclusion = 1.0h;
+                aoFactor.indirectAmbientOcclusion = 1.0h;
+
+                uint pixelLightCount = GetAdditionalLightsCount();
+
+            #if USE_FORWARD_PLUS
+                [loop] for (uint lightIndex = 0; lightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); lightIndex++)
+                {
+                    FORWARD_PLUS_SUBTRACTIVE_LIGHT_CHECK
+                    Light light = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
+                    color += ToonLightingAdditional(light, albedo, normalWS);
+                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, normalWS));
+                }
+            #endif
+
+                LIGHT_LOOP_BEGIN(pixelLightCount)
+                    Light light = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
+                    color += ToonLightingAdditional(light, albedo, normalWS);
+                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, normalWS));
+                LIGHT_LOOP_END
+            #endif
+
+                half3 wrapFactor = EvaluateWrapToonFactor(wrapLitMask);
+
+            #if defined(_OUTPUT_WRAP_TOON)
+                return half4(wrapFactor, alpha);
+            #else
+                // Final composite, then multiply wrap-toon factor onto the result.
+                color = BlendOverlayMap(color, uvMapSample, _OverlayBlendStrength);
+                color = BlendMultiplyLayer(color, wrapFactor, _WrapToonStrength);
                 color = MixFog(color, input.fogFactor);
                 return half4(color, alpha);
+            #endif
+            #endif
             #endif
             }
             ENDHLSL

@@ -16,6 +16,7 @@ Material:
   - _LAMBERTPERTURBSPACE_OBJECT
   - _LAMBERT_PERTURB_ON
   - _LAMBERT_PERTURB_SWAP_UV
+  - _OVERLAYBLENDMODE_MULTIPLY
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -35,6 +36,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _UVMap:
+        m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _AmbientStrength: 0.77
@@ -46,14 +51,21 @@ Material:
     - _LambertPerturbStrength: 2.34
     - _LambertPerturbSwapUV: 1
     - _LambertPerturbWidth: 0.527
+    - _OutputOverlayMap: 0
+    - _OverlayBlendMode: 0
+    - _OverlayBlendStrength: 0.48
     - _ShadeSmooth: 0.054
     - _ShadeThreshold: 0.5
-    - _SpecularSize: 43
-    - _SpecularSmooth: 0.243
-    - _SpecularThreshold: 0.548
+    - _WrapAmount: 0.5
+    - _WrapShadeSmooth: 0.02
+    - _WrapShadeThreshold: 0.45
+    - _WrapToonStrength: 0
+    - _OutputWrapToon: 0
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _OverlayColorA: {r: 0.96981126, g: 0.60189295, b: 0.21774997, a: 1}
+    - _OverlayColorB: {r: 1, g: 1, b: 1, a: 1}
     - _ShadeColor: {r: 0.89433956, g: 0.55854034, b: 0.7684254, a: 1}
-    - _SpecularColor: {r: 0, g: 0, b: 0, a: 1}
+    - _WrapShadeColor: {r: 0.4, g: 0.4, b: 0.5, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

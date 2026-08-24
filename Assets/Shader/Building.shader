@@ -12,6 +12,10 @@ Shader "Custom/Building"
         _TriplanarSharpness ("Triplanar Sharpness", Range(1, 8)) = 4
         _DarkOverlayStrength ("Dark Overlay Strength", Range(0, 1)) = 0.75
 
+        [Header(UV Map)]
+        _UVMap ("UV Map", 2D) = "white" {}
+        [Toggle(_OUTPUT_OVERLAY_MAP)] _OutputOverlayMap ("Output UV Map", Float) = 0
+
         [Header(Shading)]
         _ShadeThreshold ("Shade Threshold", Range(0, 1)) = 0.35
         _ShadeSmooth ("Shade Smooth", Range(0, 0.5)) = 0.05
@@ -48,6 +52,7 @@ Shader "Custom/Building"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
+            #pragma shader_feature_local _OUTPUT_OVERLAY_MAP
 
             #include "BuildingInput.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -56,15 +61,17 @@ Shader "Custom/Building"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalWS : TEXCOORD1;
-                float fogFactor : TEXCOORD2;
+                float2 uv : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float3 normalWS : TEXCOORD2;
+                float fogFactor : TEXCOORD3;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -122,6 +129,7 @@ Shader "Custom/Building"
                 VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS);
 
                 output.positionCS = posInputs.positionCS;
+                output.uv = TRANSFORM_TEX(input.uv, _UVMap);
                 output.positionWS = posInputs.positionWS;
                 output.normalWS = normalInputs.normalWS;
                 output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
@@ -133,6 +141,10 @@ Shader "Custom/Building"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
+            #if defined(_OUTPUT_OVERLAY_MAP)
+                // Direct output: sample with model UV only.
+                return SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uv);
+            #else
                 float3 normalWS = NormalizeNormalPerPixel(input.normalWS);
                 float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
                 Light mainLight = GetMainLight(shadowCoord);
@@ -157,6 +169,7 @@ Shader "Custom/Building"
 
                 color = MixFog(color, input.fogFactor);
                 return half4(color, 1.0h);
+            #endif
             }
             ENDHLSL
         }
