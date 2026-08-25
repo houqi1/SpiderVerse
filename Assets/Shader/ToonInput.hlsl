@@ -10,11 +10,20 @@ TEXTURE2D(_LambertPerturbMap);
 SAMPLER(sampler_LambertPerturbMap);
 TEXTURE2D(_UVMap);
 SAMPLER(sampler_UVMap);
+TEXTURE2D(_ExtraMap);
+SAMPLER(sampler_ExtraMap);
+TEXTURE2D(_SpMap);
+SAMPLER(sampler_SpMap);
+TEXTURE2D(_ColorMaskMap);
+SAMPLER(sampler_ColorMaskMap);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
     float4 _LambertPerturbMap_ST;
     float4 _UVMap_ST;
+    float4 _ExtraMap_ST;
+    float4 _SpMap_ST;
+    float4 _ColorMaskMap_ST;
     half4 _BaseColor;
     half4 _ShadeColor;
     half4 _OverlayColorA;
@@ -35,8 +44,16 @@ CBUFFER_START(UnityPerMaterial)
     half _LambertPerturbWidth;
     half _LambertPerturbDebug;
     half _OutputOverlayMap;
+    half _OutputExtraMap;
+    half _OutputSpMap;
+    half _SpMapChannel;
+    half _ExtraDarkStrength;
+    half _ShadeFromAmbient;
     half _OverlayBlendMode;
     half _OverlayBlendStrength;
+    half _ColorMaskMix;
+    half _ColorMaskStrength;
+    half _OutputColorMask;
 CBUFFER_END
 
 #endif

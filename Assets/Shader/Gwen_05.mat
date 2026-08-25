@@ -17,6 +17,7 @@ Material:
   - _LAMBERT_PERTURB_ON
   - _LAMBERT_PERTURB_SWAP_UV
   - _OVERLAYBLENDMODE_MULTIPLY
+  - _SPMAPCHANNEL_G
   m_InvalidKeywords:
   - _SAMPLEMAPSPACE_WORLD
   - _SAMPLE_MAP_ON
@@ -36,8 +37,13 @@ Material:
         m_Texture: {fileID: 2800000, guid: 52718332ca89ad042afcaeee9363b76a, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _SpMap:
+        m_Texture: {fileID: 2800000, guid: c20028d904e041742bc6a7eb6595792d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _WrapToonStrength: 1
     m_Colors: []
   m_BuildTextureStacks: []
   m_AllowLocking: 1
