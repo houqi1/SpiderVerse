@@ -17,14 +17,20 @@ MonoBehaviour:
     layerMask:
       serializedVersion: 2
       m_Bits: 64
-    bloomThreshold: 0.6
-    bloomKnee: 0.5
-    intensity: 0.3
-    blurAmount: 0.004
-    baseUVOffset: {x: 0, y: 0}
+    bloomThreshold: 0.66
+    bloomKnee: 0
+    intensity: 4.86
+    blurAmount: 0.005
+    baseUVOffset: {x: 0, y: 0.02}
     uvOffset: {x: 0, y: 0.07}
     offsetStrengthMap: {fileID: 2800000, guid: 6bb65bef16bdd4e4e9a4c215f8a2a805, type: 3}
-    offsetStrengthMapST: {x: 1.93, y: 1, z: 0, w: 0}
+    offsetStrengthMapST: {x: 3296.5, y: 1, z: 0, w: 0}
+    offsetStrengthMapST2: {x: 11.91, y: 1, z: 0, w: 0}
+    offsetStrengthSmoothstepEdge0: 0
+    offsetStrengthSmoothstepEdge1: 0.224
+    useStabilizedScreenUV: 1
+    stabilizeDistanceCompensation: 1
+    stabilizedReferenceDistance: 1153.9
     downsample: 2
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}

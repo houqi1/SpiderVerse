@@ -26,11 +26,30 @@ Shader "Hidden/Custom/OuterGlow"
         float4 _OffsetStrengthMapST2;
         float2 _OffsetStrengthSmoothstep; // x = edge0, y = edge1
 
+        // Stabilized screen UV (scheme 2): local = (screenUV - anchor) * aspect * depthScale
+        float2 _StabilizedAnchorUV;
+        float _StabilizedDepthScale;
+        float _StabilizedEnabled;
+
         TEXTURE2D_X(_CharacterTex);
         SAMPLER(sampler_CharacterTex);
 
         TEXTURE2D(_OffsetStrengthMap);
         SAMPLER(sampler_OffsetStrengthMap);
+
+        float2 GetStrengthMapUV(float2 screenUV)
+        {
+            float2 mapUV = screenUV;
+            if (_StabilizedEnabled > 0.5)
+            {
+                float2 local = screenUV - _StabilizedAnchorUV;
+                // Keep tiling isotropic on screen.
+                local.x *= (_ScreenParams.x / max(_ScreenParams.y, 1.0));
+                local *= max(_StabilizedDepthScale, 1e-4);
+                mapUV = local;
+            }
+            return mapUV;
+        }
 
         // Bloom-style soft-knee brightness filter (URP Bloom prefilter idea).
         // Only pixels brighter than threshold survive into blur / offset.
@@ -85,17 +104,21 @@ Shader "Hidden/Custom/OuterGlow"
             float2 uv = input.texcoord;
             float4 sharp = SAMPLE_TEXTURE2D_X(_CharacterTex, sampler_CharacterTex, uv);
 
-            float2 offsetUV = uv * _OffsetStrengthMap_ST.xy + _OffsetStrengthMap_ST.zw;
+            // Strength map uses stabilized UV (relative to character anchor), not raw screen UV.
+            float2 strengthUV = GetStrengthMapUV(uv);
+
+            float2 offsetUV = strengthUV * _OffsetStrengthMap_ST.xy + _OffsetStrengthMap_ST.zw;
             float mapValue = SAMPLE_TEXTURE2D(_OffsetStrengthMap, sampler_OffsetStrengthMap, offsetUV).r;
             float offsetStrength = (mapValue - 0.5) * 2.0;
 
-            float2 offsetUV2 = uv * _OffsetStrengthMapST2.xy + _OffsetStrengthMapST2.zw;
+            float2 offsetUV2 = strengthUV * _OffsetStrengthMapST2.xy + _OffsetStrengthMapST2.zw;
             float mapValue2 = SAMPLE_TEXTURE2D(_OffsetStrengthMap, sampler_OffsetStrengthMap, offsetUV2).r;
             float edge0 = _OffsetStrengthSmoothstep.x;
             float edge1 = _OffsetStrengthSmoothstep.y;
             float weight = smoothstep(edge0, edge1, mapValue2);
             offsetStrength *= weight;
 
+            // Blur color offset still in screen UV (glow displacement on the image).
             float2 sampleUV = uv + _BaseUVOffset + _UVOffset * offsetStrength;
 
             float3 blurred = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, sampleUV).rgb;

@@ -66,7 +66,7 @@ public static class OuterGlowSetup
         AssetDatabase.ImportAsset(RendererPath);
 
         Selection.activeObject = renderer;
-        Debug.Log("Added OuterGlowFeature to PC_Renderer. Put Gwen on the Character layer, then tune Intensity / Blur Amount.");
+        Debug.Log("Added OuterGlowFeature to PC_Renderer. Put Gwen on Character layer, add OuterGlowAnchor to her root, then tune glow settings.");
     }
 }
 #endif

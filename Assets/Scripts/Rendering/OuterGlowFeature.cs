@@ -54,6 +54,16 @@ public class OuterGlowFeature : ScriptableRendererFeature
         [Tooltip("smoothstep edge1 for the second Strength Map sample.")]
         [Range(0f, 1f)] public float offsetStrengthSmoothstepEdge1 = 1f;
 
+        [Header("Stabilized Screen UV")]
+        [Tooltip("Sample Strength Map relative to OuterGlowAnchor screen position (scheme 2).")]
+        public bool useStabilizedScreenUV = true;
+
+        [Tooltip("Scale local UV by (anchorDepth / referenceDistance) so pattern size is more stable with distance.")]
+        public bool stabilizeDistanceCompensation = true;
+
+        [Tooltip("At this camera distance, depth scale = 1.")]
+        [Min(0.01f)] public float stabilizedReferenceDistance = 5f;
+
         [Range(0, 2)] public int downsample = 1;
 
         public RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
@@ -128,6 +138,9 @@ public class OuterGlowFeature : ScriptableRendererFeature
         static readonly int s_OffsetStrengthMapSTId = Shader.PropertyToID("_OffsetStrengthMap_ST");
         static readonly int s_OffsetStrengthMapST2Id = Shader.PropertyToID("_OffsetStrengthMapST2");
         static readonly int s_OffsetStrengthSmoothstepId = Shader.PropertyToID("_OffsetStrengthSmoothstep");
+        static readonly int s_StabilizedAnchorUVId = Shader.PropertyToID("_StabilizedAnchorUV");
+        static readonly int s_StabilizedDepthScaleId = Shader.PropertyToID("_StabilizedDepthScale");
+        static readonly int s_StabilizedEnabledId = Shader.PropertyToID("_StabilizedEnabled");
 
         static readonly List<ShaderTagId> s_ShaderTagIds = new List<ShaderTagId>
         {
@@ -152,6 +165,7 @@ public class OuterGlowFeature : ScriptableRendererFeature
                 return;
 
             UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
+            UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
 
             if (resourceData.isActiveTargetBackBuffer)
                 return;
@@ -159,6 +173,8 @@ public class OuterGlowFeature : ScriptableRendererFeature
             TextureHandle cameraColor = resourceData.activeColorTexture;
             if (!cameraColor.IsValid())
                 return;
+
+            ApplyStabilizedScreenUV(cameraData.camera);
 
             int downsample = Mathf.Clamp(m_Settings.downsample, 0, 2);
             TextureDesc colorDesc = cameraColor.GetDescriptor(renderGraph);
@@ -275,6 +291,9 @@ public class OuterGlowFeature : ScriptableRendererFeature
                 passData.offsetStrengthSmoothstep = new Vector2(
                     m_Settings.offsetStrengthSmoothstepEdge0,
                     m_Settings.offsetStrengthSmoothstepEdge1);
+                passData.stabilizedAnchorUV = m_Material.GetVector(s_StabilizedAnchorUVId);
+                passData.stabilizedDepthScale = m_Material.GetFloat(s_StabilizedDepthScaleId);
+                passData.stabilizedEnabled = m_Material.GetFloat(s_StabilizedEnabledId);
 
                 builder.UseTexture(characterColor, AccessFlags.Read);
                 builder.UseTexture(blurColor, AccessFlags.Read);
@@ -291,6 +310,9 @@ public class OuterGlowFeature : ScriptableRendererFeature
                     data.material.SetVector(s_OffsetStrengthMapSTId, data.offsetStrengthMapST);
                     data.material.SetVector(s_OffsetStrengthMapST2Id, data.offsetStrengthMapST2);
                     data.material.SetVector(s_OffsetStrengthSmoothstepId, data.offsetStrengthSmoothstep);
+                    data.material.SetVector(s_StabilizedAnchorUVId, data.stabilizedAnchorUV);
+                    data.material.SetFloat(s_StabilizedDepthScaleId, data.stabilizedDepthScale);
+                    data.material.SetFloat(s_StabilizedEnabledId, data.stabilizedEnabled);
                     context.cmd.SetGlobalTexture(s_CharacterTexId, data.characterColor);
                     Blitter.BlitTexture(
                         context.cmd,
@@ -300,6 +322,71 @@ public class OuterGlowFeature : ScriptableRendererFeature
                         kCompositePass);
                 });
             }
+        }
+
+        void ApplyStabilizedScreenUV(Camera camera)
+        {
+            if (!m_Settings.useStabilizedScreenUV || camera == null)
+            {
+                DisableStabilizedUV();
+                return;
+            }
+
+            if (!TryGetStabilizedAnchorPosition(out Vector3 anchorWS))
+            {
+                DisableStabilizedUV();
+                return;
+            }
+
+            Vector3 viewport = camera.WorldToViewportPoint(anchorWS);
+            // Behind camera → fall back to raw screen UV.
+            if (viewport.z <= 0f)
+            {
+                DisableStabilizedUV();
+                return;
+            }
+
+            float depth = Mathf.Max(viewport.z, 1e-3f);
+            float reference = Mathf.Max(m_Settings.stabilizedReferenceDistance, 0.01f);
+            float depthScale = m_Settings.stabilizeDistanceCompensation ? depth / reference : 1f;
+
+            m_Material.SetVector(s_StabilizedAnchorUVId, new Vector4(viewport.x, viewport.y, 0f, 0f));
+            m_Material.SetFloat(s_StabilizedDepthScaleId, depthScale);
+            m_Material.SetFloat(s_StabilizedEnabledId, 1f);
+        }
+
+        void DisableStabilizedUV()
+        {
+            m_Material.SetVector(s_StabilizedAnchorUVId, new Vector4(0.5f, 0.5f, 0f, 0f));
+            m_Material.SetFloat(s_StabilizedDepthScaleId, 1f);
+            m_Material.SetFloat(s_StabilizedEnabledId, 0f);
+        }
+
+        bool TryGetStabilizedAnchorPosition(out Vector3 position)
+        {
+            if (OuterGlowAnchor.Current != null)
+            {
+                position = OuterGlowAnchor.Current.AnchorPosition;
+                return true;
+            }
+
+            // Fallback: first renderer on the glow layer mask (works in Edit Mode too).
+            int mask = m_Settings.layerMask.value;
+            Renderer[] renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r == null || !r.enabled || !r.gameObject.activeInHierarchy)
+                    continue;
+                if (((1 << r.gameObject.layer) & mask) == 0)
+                    continue;
+
+                position = r.bounds.center;
+                return true;
+            }
+
+            position = default;
+            return false;
         }
 
         void InitRendererList(ContextContainer frameData, ref DrawPassData passData, RenderGraph renderGraph)
@@ -333,6 +420,9 @@ public class OuterGlowFeature : ScriptableRendererFeature
             public Vector4 offsetStrengthMapST;
             public Vector4 offsetStrengthMapST2;
             public Vector2 offsetStrengthSmoothstep;
+            public Vector4 stabilizedAnchorUV;
+            public float stabilizedDepthScale;
+            public float stabilizedEnabled;
         }
     }
 }

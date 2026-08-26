@@ -33,6 +33,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _ColorMaskMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ExtraMap:
         m_Texture: {fileID: 2800000, guid: 7d76b48f71e64ff4982345a0bd9adde9, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -49,16 +53,12 @@ Material:
         m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
-    - _ColorMaskMap:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _AmbientStrength: 0.77
-    - _Cull: 2
     - _ColorMaskMix: 0.5
     - _ColorMaskStrength: 1
+    - _Cull: 2
     - _ExtraDarkStrength: 0.6
     - _LambertPerturbDebug: 0
     - _LambertPerturbMode: 1
@@ -73,7 +73,7 @@ Material:
     - _OutputSpMap: 0
     - _OutputWrapToon: 0
     - _OverlayBlendMode: 0
-    - _OverlayBlendStrength: 0.648
+    - _OverlayBlendStrength: 0.763
     - _ShadeFromAmbient: 0
     - _ShadeSmooth: 0.054
     - _ShadeThreshold: 0.5
