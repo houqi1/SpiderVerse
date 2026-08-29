@@ -19,7 +19,7 @@ MonoBehaviour:
       m_Bits: 64
     bloomThreshold: 0.66
     bloomKnee: 0
-    intensity: 4.86
+    intensity: 4.1
     blurAmount: 0.005
     baseUVOffset: {x: 0, y: 0.02}
     uvOffset: {x: 0, y: 0.07}
@@ -31,9 +31,44 @@ MonoBehaviour:
     useStabilizedScreenUV: 1
     stabilizeDistanceCompensation: 1
     stabilizedReferenceDistance: 1153.9
+    useDerivativeScale: 0
+    maskErode: 1
+    maskSoftness: 0.35
     downsample: 2
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
+--- !u!114 &-6102837461928374651
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 942df0065c144444a5b9c2596f1ee94a, type: 3}
+  m_Name: CharacterOutlineFeature
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  settings:
+    layerMask:
+      serializedVersion: 2
+      m_Bits: 64
+    useNormalExtrusionMask: 1
+    normalExtrusionOuter: 0.01
+    normalExtrusionInner: 0.005
+    useSmoothNormalsFromVertexColor: 1
+    outlineColor: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
+    outerWidth: 4
+    innerWidth: 0
+    outlineOffset: {x: 7.97, y: -3.8}
+    intensity: 1
+    compensateDistance: 1
+    referenceDistance: 5
+    downsample: 0
+    renderPassEvent: 550
+    outlineShader: {fileID: 4800000, guid: 684fc3509a124569a468592504493c1f, type: 3}
+    maskShader: {fileID: 4800000, guid: 6cd9bfd931564e3cbe80fb4c4cd12a85, type: 3}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -61,7 +96,8 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
   - {fileID: -8009497109252560850}
-  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890
+  - {fileID: -6102837461928374651}
+  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eab
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}

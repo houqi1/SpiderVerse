@@ -58,11 +58,22 @@ public class OuterGlowFeature : ScriptableRendererFeature
         [Tooltip("Sample Strength Map relative to OuterGlowAnchor screen position (scheme 2).")]
         public bool useStabilizedScreenUV = true;
 
-        [Tooltip("Scale local UV by (anchorDepth / referenceDistance) so pattern size is more stable with distance.")]
+        [Tooltip("Scale Strength Map local UV by (anchorDepth / referenceDistance).")]
         public bool stabilizeDistanceCompensation = true;
 
-        [Tooltip("At this camera distance, depth scale = 1.")]
+        [Tooltip("At this camera distance, Strength Map depth scale = 1. Also used as derivative reference.")]
         [Min(0.01f)] public float stabilizedReferenceDistance = 5f;
+
+        [Header("Derivative Scale")]
+        [Tooltip("Scale Blur Amount and UV Offset by screen-space derivatives of the anchor plane (world meters/pixel).")]
+        public bool useDerivativeScale = true;
+
+        [Header("Mask Edge")]
+        [Tooltip("Shrink body coverage in Character RT texels so glow fills up to the silhouette (fixes gap/seam).")]
+        [Range(0f, 4f)] public float maskErode = 1f;
+
+        [Tooltip("Feather coverage with smoothstep(0, softness, alpha). Higher = softer hole edge.")]
+        [Range(0.01f, 1f)] public float maskSoftness = 0.35f;
 
         [Range(0, 2)] public int downsample = 1;
 
@@ -141,6 +152,12 @@ public class OuterGlowFeature : ScriptableRendererFeature
         static readonly int s_StabilizedAnchorUVId = Shader.PropertyToID("_StabilizedAnchorUV");
         static readonly int s_StabilizedDepthScaleId = Shader.PropertyToID("_StabilizedDepthScale");
         static readonly int s_StabilizedEnabledId = Shader.PropertyToID("_StabilizedEnabled");
+        static readonly int s_MaskErodeId = Shader.PropertyToID("_MaskErode");
+        static readonly int s_MaskSoftnessId = Shader.PropertyToID("_MaskSoftness");
+        static readonly int s_CharacterTexTexelSizeId = Shader.PropertyToID("_CharacterTex_TexelSize");
+        static readonly int s_DerivativeScaleEnabledId = Shader.PropertyToID("_DerivativeScaleEnabled");
+        static readonly int s_AnchorViewDepthId = Shader.PropertyToID("_AnchorViewDepth");
+        static readonly int s_RefWorldHeightId = Shader.PropertyToID("_RefWorldHeight");
 
         static readonly List<ShaderTagId> s_ShaderTagIds = new List<ShaderTagId>
         {
@@ -174,7 +191,9 @@ public class OuterGlowFeature : ScriptableRendererFeature
             if (!cameraColor.IsValid())
                 return;
 
-            ApplyStabilizedScreenUV(cameraData.camera);
+            Camera camera = cameraData.camera;
+            ApplyStabilizedScreenUV(camera);
+            ApplyDerivativeScale(camera);
 
             int downsample = Mathf.Clamp(m_Settings.downsample, 0, 2);
             TextureDesc colorDesc = cameraColor.GetDescriptor(renderGraph);
@@ -225,6 +244,11 @@ public class OuterGlowFeature : ScriptableRendererFeature
             m_Material.SetVector(
                 s_OffsetStrengthSmoothstepId,
                 new Vector2(m_Settings.offsetStrengthSmoothstepEdge0, m_Settings.offsetStrengthSmoothstepEdge1));
+            m_Material.SetFloat(s_MaskErodeId, Mathf.Max(0f, m_Settings.maskErode));
+            m_Material.SetFloat(s_MaskSoftnessId, Mathf.Clamp(m_Settings.maskSoftness, 0.01f, 1f));
+            m_Material.SetVector(
+                s_CharacterTexTexelSizeId,
+                new Vector4(1f / colorDesc.width, 1f / colorDesc.height, colorDesc.width, colorDesc.height));
 
             if (!characterColor.IsValid() || !brightColor.IsValid() || !blurColor.IsValid())
                 return;
@@ -294,6 +318,12 @@ public class OuterGlowFeature : ScriptableRendererFeature
                 passData.stabilizedAnchorUV = m_Material.GetVector(s_StabilizedAnchorUVId);
                 passData.stabilizedDepthScale = m_Material.GetFloat(s_StabilizedDepthScaleId);
                 passData.stabilizedEnabled = m_Material.GetFloat(s_StabilizedEnabledId);
+                passData.maskErode = m_Material.GetFloat(s_MaskErodeId);
+                passData.maskSoftness = m_Material.GetFloat(s_MaskSoftnessId);
+                passData.characterTexelSize = m_Material.GetVector(s_CharacterTexTexelSizeId);
+                passData.derivativeScaleEnabled = m_Material.GetFloat(s_DerivativeScaleEnabledId);
+                passData.anchorViewDepth = m_Material.GetFloat(s_AnchorViewDepthId);
+                passData.refWorldHeight = m_Material.GetFloat(s_RefWorldHeightId);
 
                 builder.UseTexture(characterColor, AccessFlags.Read);
                 builder.UseTexture(blurColor, AccessFlags.Read);
@@ -313,6 +343,12 @@ public class OuterGlowFeature : ScriptableRendererFeature
                     data.material.SetVector(s_StabilizedAnchorUVId, data.stabilizedAnchorUV);
                     data.material.SetFloat(s_StabilizedDepthScaleId, data.stabilizedDepthScale);
                     data.material.SetFloat(s_StabilizedEnabledId, data.stabilizedEnabled);
+                    data.material.SetFloat(s_MaskErodeId, data.maskErode);
+                    data.material.SetFloat(s_MaskSoftnessId, data.maskSoftness);
+                    data.material.SetVector(s_CharacterTexTexelSizeId, data.characterTexelSize);
+                    data.material.SetFloat(s_DerivativeScaleEnabledId, data.derivativeScaleEnabled);
+                    data.material.SetFloat(s_AnchorViewDepthId, data.anchorViewDepth);
+                    data.material.SetFloat(s_RefWorldHeightId, data.refWorldHeight);
                     context.cmd.SetGlobalTexture(s_CharacterTexId, data.characterColor);
                     Blitter.BlitTexture(
                         context.cmd,
@@ -332,15 +368,7 @@ public class OuterGlowFeature : ScriptableRendererFeature
                 return;
             }
 
-            if (!TryGetStabilizedAnchorPosition(out Vector3 anchorWS))
-            {
-                DisableStabilizedUV();
-                return;
-            }
-
-            Vector3 viewport = camera.WorldToViewportPoint(anchorWS);
-            // Behind camera → fall back to raw screen UV.
-            if (viewport.z <= 0f)
+            if (!TryGetAnchorViewport(camera, out Vector3 viewport))
             {
                 DisableStabilizedUV();
                 return;
@@ -360,6 +388,46 @@ public class OuterGlowFeature : ScriptableRendererFeature
             m_Material.SetVector(s_StabilizedAnchorUVId, new Vector4(0.5f, 0.5f, 0f, 0f));
             m_Material.SetFloat(s_StabilizedDepthScaleId, 1f);
             m_Material.SetFloat(s_StabilizedEnabledId, 0f);
+        }
+
+        void ApplyDerivativeScale(Camera camera)
+        {
+            if (!m_Settings.useDerivativeScale || camera == null)
+            {
+                DisableDerivativeScale();
+                return;
+            }
+
+            if (!TryGetAnchorViewport(camera, out Vector3 viewport))
+            {
+                DisableDerivativeScale();
+                return;
+            }
+
+            float reference = Mathf.Max(m_Settings.stabilizedReferenceDistance, 0.01f);
+            float halfFovRad = camera.fieldOfView * 0.5f * Mathf.Deg2Rad;
+            float worldHeightAtRef = 2f * reference * Mathf.Tan(halfFovRad);
+
+            m_Material.SetFloat(s_DerivativeScaleEnabledId, 1f);
+            m_Material.SetFloat(s_AnchorViewDepthId, Mathf.Max(viewport.z, 1e-3f));
+            m_Material.SetFloat(s_RefWorldHeightId, worldHeightAtRef);
+        }
+
+        void DisableDerivativeScale()
+        {
+            m_Material.SetFloat(s_DerivativeScaleEnabledId, 0f);
+            m_Material.SetFloat(s_AnchorViewDepthId, 1f);
+            m_Material.SetFloat(s_RefWorldHeightId, 1f);
+        }
+
+        bool TryGetAnchorViewport(Camera camera, out Vector3 viewport)
+        {
+            viewport = default;
+            if (camera == null || !TryGetStabilizedAnchorPosition(out Vector3 anchorWS))
+                return false;
+
+            viewport = camera.WorldToViewportPoint(anchorWS);
+            return viewport.z > 0f;
         }
 
         bool TryGetStabilizedAnchorPosition(out Vector3 position)
@@ -423,6 +491,12 @@ public class OuterGlowFeature : ScriptableRendererFeature
             public Vector4 stabilizedAnchorUV;
             public float stabilizedDepthScale;
             public float stabilizedEnabled;
+            public float maskErode;
+            public float maskSoftness;
+            public Vector4 characterTexelSize;
+            public float derivativeScaleEnabled;
+            public float anchorViewDepth;
+            public float refWorldHeight;
         }
     }
 }
