@@ -2,6 +2,8 @@ Shader "Hidden/Custom/CharacterOutlineMask"
 {
     Properties
     {
+        // Declared for inspector/debug; runtime values are set as globals / material floats
+        // outside UnityPerMaterial so per-draw overrides work with RendererList.
         _NormalExtrusion ("Normal Extrusion", Float) = 0
         _UseSmoothNormalVC ("Use Smooth Normal Vertex Color", Float) = 0
     }
@@ -20,7 +22,6 @@ Shader "Hidden/Custom/CharacterOutlineMask"
             Name "CharacterMaskRed"
             Tags { "LightMode" = "UniversalForward" }
 
-            // Depth-test against the camera depth (bound read-only); do not modify scene depth.
             ZWrite Off
             ZTest LEqual
             Cull Back
@@ -30,10 +31,9 @@ Shader "Hidden/Custom/CharacterOutlineMask"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            CBUFFER_START(UnityPerMaterial)
-                float _NormalExtrusion;
-                float _UseSmoothNormalVC;
-            CBUFFER_END
+            // NOT in UnityPerMaterial: must accept cmd.SetGlobalFloat per draw.
+            float _NormalExtrusion;
+            float _UseSmoothNormalVC;
 
             struct Attributes
             {
@@ -50,10 +50,8 @@ Shader "Hidden/Custom/CharacterOutlineMask"
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
-            // Skinned meshes: Unity skinning updates Position/Normal/Tangent only.
-            // Smooth normals are baked into vertex color as tangent-space vectors (0..1).
-            // Reconstruct object-space smooth normal with the (skinned) TBN so extrusion
-            // follows bones correctly.
+            // Skinned meshes: skinning updates Position/Normal/Tangent only.
+            // Smooth normals are baked into vertex color as tangent-space (0..1).
             float3 GetExtrusionNormalOS(Attributes input)
             {
                 float3 normalOS = input.normalOS;
@@ -83,7 +81,6 @@ Shader "Hidden/Custom/CharacterOutlineMask"
                 if (bLen > 1e-6)
                     bitangentOS /= bLen;
 
-                // Tangent-space → object-space using skinned TBN (follows bones).
                 float3 smoothOS = tangentOS * smoothTS.x + bitangentOS * smoothTS.y + normalOS * smoothTS.z;
                 float sLen = length(smoothOS);
                 return sLen > 1e-6 ? smoothOS / sLen : normalOS;

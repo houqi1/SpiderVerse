@@ -24,13 +24,12 @@ Shader "Hidden/Custom/CharacterOutline"
         float _OutlineIntensity;
         float2 _CharacterScreenUV;
         float4 _CharacterMaskTex_TexelSize;
-        // 0 = screen-space expand from body mask; 1 = outerMask - innerMask (normal extrusion path)
+        // 0 = screen-space expand from body mask; 1 = outerMask - innerMask (normal extrusion)
         float _UseExtrudedMask;
 
         TEXTURE2D_X(_CharacterMaskTex);
         TEXTURE2D_X(_CharacterMaskOuterTex);
         TEXTURE2D_X(_CharacterMaskInnerTex);
-        // sampler_PointClamp comes from Core/Blit includes; clamp avoids tiling when offset.
 
         float SampleCharacterMask(float2 uv)
         {
@@ -56,6 +55,7 @@ Shader "Hidden/Custom/CharacterOutline"
             return mask * notOccluded;
         }
 
+        // Scheme 1 (screen): Expand toward character screen UV.
         float ExpandCharacterMaskByScreenPos(float2 expandUV, float2 characterUV, float widthPixels, float2 occlusionUV)
         {
             float2 texel = _CharacterMaskTex_TexelSize.xy;
@@ -96,13 +96,14 @@ Shader "Hidden/Custom/CharacterOutline"
 
             if (_UseExtrudedMask > 0.5)
             {
-                // Geometry already sized the masks. Ring = outer - inner. No screen expand.
+                // Scheme 1 (extrusion): ring = Mask(outerExt) - Mask(innerExt).
                 float outerMask = saturate(SAMPLE_TEXTURE2D_X(_CharacterMaskOuterTex, sampler_PointClamp, sampleUV).r);
                 float innerMask = saturate(SAMPLE_TEXTURE2D_X(_CharacterMaskInnerTex, sampler_PointClamp, sampleUV).r);
                 outline = saturate(outerMask - innerMask);
             }
             else
             {
+                // Scheme 1 (screen): ring = Expand(outer) - Expand(inner).
                 float2 characterUV = _CharacterScreenUV - offsetUV;
                 float outerW = max(_OutlineWidthOuter, _OutlineWidthInner);
                 float innerW = min(_OutlineWidthOuter, _OutlineWidthInner);
@@ -111,7 +112,7 @@ Shader "Hidden/Custom/CharacterOutline"
                 outline = saturate(outerMask - innerMask);
             }
 
-            // Replace composite: on the ring, outline color fully covers scene color.
+            // Replace: outline color fully covers scene on the ring.
             float3 result = lerp(sceneColor, _OutlineColor.rgb * _OutlineIntensity, outline);
             return float4(result, 1.0);
         }

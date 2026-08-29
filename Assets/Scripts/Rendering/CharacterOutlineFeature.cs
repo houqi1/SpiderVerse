@@ -8,12 +8,51 @@ using UnityEngine.Rendering.RenderGraphModule.Util;
 using UnityEngine.Rendering.Universal;
 
 /// <summary>
-/// Post-process character outline.
-/// Screen-expand mode: body mask → Expand(outer) - Expand(inner).
-/// Normal-extrusion mode: draw extruded outer + inner masks → outer - inner (no screen expand).
+/// Multi-layer character outline (scheme 1):
+/// Screen mode: one body mask, each layer ring = Expand(outer) - Expand(inner).
+/// Extrusion mode: masks at each unique extrusion, each layer ring = Mask(outerExt) - Mask(innerExt).
 /// </summary>
 public class CharacterOutlineFeature : ScriptableRendererFeature
 {
+    public const int MaxRecommendedLayers = 8;
+
+    /// <summary>
+    /// Value type so Inspector list elements cannot share references (class lists were overwriting each other).
+    /// </summary>
+    [Serializable]
+    public struct OutlineLayer
+    {
+        public bool enabled;
+        [ColorUsage(true, true)] public Color color;
+        [Range(0f, 8f)] public float intensity;
+        [Tooltip("Screen-space ring offset in pixels (XY), before distance compensation.")]
+        public Vector2 offset;
+
+        [Header("Screen Expand Mode")]
+        [Tooltip("Outer expand width in pixels at the reference distance.")]
+        [Range(0f, 32f)] public float outerWidth;
+        [Tooltip("Inner expand width in pixels. Ring = Expand(outer) - Expand(inner).")]
+        [Range(0f, 32f)] public float innerWidth;
+
+        [Header("Normal Extrusion Mode")]
+        [Tooltip("Outer object-space extrusion. Ring = Mask(outer) - Mask(inner).")]
+        public float outerExtrusion;
+        [Tooltip("Inner object-space extrusion (0 = body).")]
+        public float innerExtrusion;
+
+        public static OutlineLayer Default => new OutlineLayer
+        {
+            enabled = true,
+            color = Color.white, // HDR-capable via ColorUsage
+            intensity = 1f,
+            offset = Vector2.zero,
+            outerWidth = 4f,
+            innerWidth = 0f,
+            outerExtrusion = 0.02f,
+            innerExtrusion = 0f,
+        };
+    }
+
     [Serializable]
     public class Settings
     {
@@ -21,31 +60,18 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         public LayerMask layerMask = 1 << 6; // Character
 
         [Header("Mask")]
-        [Tooltip("On: ring = normal-extruded outer mask - inner mask (no screen-space expand).")]
+        [Tooltip("On: scheme 1 uses normal-extruded masks. Off: scheme 1 uses screen-space expand.")]
         public bool useNormalExtrusionMask = false;
-
-        [Tooltip("Object-space extrusion for the outer mask when Use Normal Extrusion Mask is on. Negative = inward.")]
-        public float normalExtrusionOuter = 0.02f;
-
-        [Tooltip("Object-space extrusion for the inner mask (0 = tight body). Negative = inward. Ring = outer - inner.")]
-        public float normalExtrusionInner = 0f;
 
         [Tooltip("Extrude using smooth normals baked into vertex color (tangent space). Required for correct skinned outlines.")]
         public bool useSmoothNormalsFromVertexColor = false;
 
-        [Header("Outline")]
-        public Color outlineColor = Color.white;
-
-        [Tooltip("Screen-expand mode only: outer width in pixels at the reference distance.")]
-        [Range(0f, 32f)] public float outerWidth = 4f;
-
-        [Tooltip("Screen-expand mode only: inner width in pixels. Ring = outer - inner.")]
-        [Range(0f, 32f)] public float innerWidth = 0f;
-
-        [Tooltip("Screen-space ring offset in pixels (XY).")]
-        public Vector2 outlineOffset = Vector2.zero;
-
-        [Range(0f, 8f)] public float intensity = 1f;
+        [Header("Layers (Scheme 1)")]
+        [Tooltip("Each enabled layer draws one ring. Arbitrary count; keep small for performance.")]
+        public List<OutlineLayer> layers = new List<OutlineLayer>
+        {
+            OutlineLayer.Default
+        };
 
         [Header("Distance Stability")]
         [Tooltip("Scale screen widths/offset by (referenceDistance / anchorDepth).")]
@@ -61,13 +87,23 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
         public Shader outlineShader;
         public Shader maskShader;
+
+        // Legacy single-layer fields (migrated into layers[0] once).
+        [HideInInspector, ColorUsage(true, true)] public Color outlineColor = Color.white;
+        [HideInInspector] public float outerWidth = 4f;
+        [HideInInspector] public float innerWidth = 0f;
+        [HideInInspector] public Vector2 outlineOffset = Vector2.zero;
+        [HideInInspector] public float intensity = 1f;
+        [HideInInspector] public float normalExtrusionOuter = 0.02f;
+        [HideInInspector] public float normalExtrusionInner = 0f;
+        [HideInInspector] public bool legacyMigrated;
     }
 
     public Settings settings = new Settings();
 
     Material m_OutlineMaterial;
-    Material m_MaskMaterialOuter;
-    Material m_MaskMaterialInner;
+    readonly Dictionary<int, Material> m_MaskMaterialPool = new Dictionary<int, Material>();
+    readonly List<Material> m_OutlineMaterialPerLayer = new List<Material>();
     CharacterOutlinePass m_Pass;
 
     public override void Create()
@@ -80,31 +116,149 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         if (settings.outlineShader == null || settings.maskShader == null)
             return;
 
+        MigrateLegacySettings(settings);
+
+        if (m_OutlineMaterialPerLayer.Count > 0 &&
+            m_OutlineMaterialPerLayer[0] != null &&
+            m_OutlineMaterialPerLayer[0].shader != settings.outlineShader)
+        {
+            ClearOutlineMaterialPool();
+        }
+
         if (m_OutlineMaterial == null || m_OutlineMaterial.shader != settings.outlineShader)
         {
             CoreUtils.Destroy(m_OutlineMaterial);
             m_OutlineMaterial = CoreUtils.CreateEngineMaterial(settings.outlineShader);
         }
 
-        if (m_MaskMaterialOuter == null || m_MaskMaterialOuter.shader != settings.maskShader)
+        // Drop pooled mask materials if shader changed.
+        if (m_MaskMaterialPool.Count > 0)
         {
-            CoreUtils.Destroy(m_MaskMaterialOuter);
-            m_MaskMaterialOuter = CoreUtils.CreateEngineMaterial(settings.maskShader);
+            foreach (var kv in m_MaskMaterialPool)
+            {
+                if (kv.Value != null && kv.Value.shader != settings.maskShader)
+                {
+                    ClearMaskMaterialPool();
+                    break;
+                }
+            }
         }
 
-        if (m_MaskMaterialInner == null || m_MaskMaterialInner.shader != settings.maskShader)
-        {
-            CoreUtils.Destroy(m_MaskMaterialInner);
-            m_MaskMaterialInner = CoreUtils.CreateEngineMaterial(settings.maskShader);
-        }
+        EnsureOutlineMaterials(Mathf.Max(1, settings.layers != null ? settings.layers.Count : 1));
 
-        m_Pass = new CharacterOutlinePass(m_OutlineMaterial, m_MaskMaterialOuter, m_MaskMaterialInner, settings);
+        m_Pass = new CharacterOutlinePass(
+            GetOutlineMaterialForLayer, GetOrCreateMaskMaterial, settings);
         m_Pass.renderPassEvent = settings.renderPassEvent;
+    }
+
+    Material GetOrCreateMaskMaterial(float extrusion)
+    {
+        int key = Mathf.RoundToInt(extrusion * 10000f);
+        if (!m_MaskMaterialPool.TryGetValue(key, out Material mat) || mat == null)
+        {
+            mat = CoreUtils.CreateEngineMaterial(settings.maskShader);
+            m_MaskMaterialPool[key] = mat;
+        }
+
+        mat.SetFloat("_NormalExtrusion", extrusion);
+        mat.SetFloat("_UseSmoothNormalVC", settings.useSmoothNormalsFromVertexColor ? 1f : 0f);
+        return mat;
+    }
+
+    Material GetOutlineMaterialForLayer(int layerIndex)
+    {
+        EnsureOutlineMaterials(layerIndex + 1);
+        return m_OutlineMaterialPerLayer[layerIndex];
+    }
+
+    void EnsureOutlineMaterials(int count)
+    {
+        while (m_OutlineMaterialPerLayer.Count < count)
+        {
+            Material mat = CoreUtils.CreateEngineMaterial(settings.outlineShader);
+            m_OutlineMaterialPerLayer.Add(mat);
+        }
+
+        // Keep shared material for fallback/legacy.
+        if (m_OutlineMaterial == null || m_OutlineMaterial.shader != settings.outlineShader)
+        {
+            CoreUtils.Destroy(m_OutlineMaterial);
+            m_OutlineMaterial = CoreUtils.CreateEngineMaterial(settings.outlineShader);
+        }
+    }
+
+    void ClearMaskMaterialPool()
+    {
+        foreach (var kv in m_MaskMaterialPool)
+            CoreUtils.Destroy(kv.Value);
+        m_MaskMaterialPool.Clear();
+    }
+
+    void ClearOutlineMaterialPool()
+    {
+        for (int i = 0; i < m_OutlineMaterialPerLayer.Count; i++)
+            CoreUtils.Destroy(m_OutlineMaterialPerLayer[i]);
+        m_OutlineMaterialPerLayer.Clear();
+    }
+
+    static void MigrateLegacySettings(Settings s)
+    {
+        if (s.layers == null)
+            s.layers = new List<OutlineLayer>();
+
+        if (s.layers.Count == 0)
+        {
+            s.layers.Add(new OutlineLayer
+            {
+                enabled = true,
+                color = s.outlineColor,
+                intensity = s.intensity,
+                offset = s.outlineOffset,
+                outerWidth = s.outerWidth,
+                innerWidth = s.innerWidth,
+                outerExtrusion = s.normalExtrusionOuter,
+                innerExtrusion = s.normalExtrusionInner,
+            });
+            s.legacyMigrated = true;
+            return;
+        }
+
+        if (!s.legacyMigrated && s.layers.Count == 1)
+        {
+            OutlineLayer L = s.layers[0];
+            bool layerLooksDefault =
+                L.color == Color.white &&
+                Mathf.Approximately(L.intensity, 1f) &&
+                L.offset == Vector2.zero &&
+                Mathf.Approximately(L.outerWidth, 4f) &&
+                Mathf.Approximately(L.innerWidth, 0f);
+
+            bool legacyLooksCustom =
+                s.outlineColor != Color.white ||
+                !Mathf.Approximately(s.intensity, 1f) ||
+                s.outlineOffset != Vector2.zero ||
+                !Mathf.Approximately(s.outerWidth, 4f) ||
+                !Mathf.Approximately(s.normalExtrusionOuter, 0.02f);
+
+            if (layerLooksDefault && legacyLooksCustom)
+            {
+                L.color = s.outlineColor;
+                L.intensity = s.intensity;
+                L.offset = s.outlineOffset;
+                L.outerWidth = s.outerWidth;
+                L.innerWidth = s.innerWidth;
+                L.outerExtrusion = s.normalExtrusionOuter;
+                L.innerExtrusion = s.normalExtrusionInner;
+                s.layers[0] = L;
+            }
+
+            s.legacyMigrated = true;
+        }
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
     {
-        if (m_Pass == null || m_OutlineMaterial == null || m_MaskMaterialOuter == null || m_MaskMaterialInner == null)
+        if (m_Pass == null || m_OutlineMaterial == null || settings.maskShader == null)
             return;
 
         CameraType cameraType = renderingData.cameraData.cameraType;
@@ -120,11 +274,9 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
     {
         m_Pass = null;
         CoreUtils.Destroy(m_OutlineMaterial);
-        CoreUtils.Destroy(m_MaskMaterialOuter);
-        CoreUtils.Destroy(m_MaskMaterialInner);
         m_OutlineMaterial = null;
-        m_MaskMaterialOuter = null;
-        m_MaskMaterialInner = null;
+        ClearMaskMaterialPool();
+        ClearOutlineMaterialPool();
     }
 
     sealed class CharacterOutlinePass : ScriptableRenderPass
@@ -152,27 +304,24 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             new ShaderTagId("SRPDefaultUnlit"),
         };
 
-        readonly Material m_OutlineMaterial;
-        readonly Material m_MaskMaterialOuter;
-        readonly Material m_MaskMaterialInner;
+        readonly System.Func<int, Material> m_GetOutlineMaterial;
+        readonly System.Func<float, Material> m_GetMaskMaterial;
         readonly Settings m_Settings;
 
         public CharacterOutlinePass(
-            Material outlineMaterial,
-            Material maskMaterialOuter,
-            Material maskMaterialInner,
+            System.Func<int, Material> getOutlineMaterial,
+            System.Func<float, Material> getMaskMaterial,
             Settings settings)
         {
-            m_OutlineMaterial = outlineMaterial;
-            m_MaskMaterialOuter = maskMaterialOuter;
-            m_MaskMaterialInner = maskMaterialInner;
+            m_GetOutlineMaterial = getOutlineMaterial;
+            m_GetMaskMaterial = getMaskMaterial;
             m_Settings = settings;
             profilingSampler = new ProfilingSampler("Character Outline");
         }
 
         public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
         {
-            if (m_OutlineMaterial == null || m_MaskMaterialOuter == null || m_MaskMaterialInner == null)
+            if (m_GetOutlineMaterial == null || m_GetMaskMaterial == null)
                 return;
 
             UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
@@ -185,12 +334,28 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             if (!cameraColor.IsValid())
                 return;
 
+            List<OutlineLayer> layers = m_Settings.layers;
+            if (layers == null || layers.Count == 0)
+                return;
+
+            var active = new List<OutlineLayer>(layers.Count);
+            for (int i = 0; i < layers.Count; i++)
+            {
+                OutlineLayer layer = layers[i];
+                if (layer.enabled)
+                    active.Add(layer);
+            }
+
+            if (active.Count == 0)
+                return;
+
             Camera camera = cameraData.camera;
             TryGetCharacterScreenUV(camera, out Vector2 characterScreenUV, out float anchorDepth);
 
             TextureDesc colorDesc = cameraColor.GetDescriptor(renderGraph);
             int width = Math.Max(1, colorDesc.width);
             int height = Math.Max(1, colorDesc.height);
+            Vector4 maskTexelSize = new Vector4(1f / width, 1f / height, width, height);
 
             var maskDesc = new TextureDesc(width, height)
             {
@@ -205,6 +370,7 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             };
 
             TextureHandle sceneDepth = resourceData.activeDepthTexture;
+            TextureHandle cameraDepthTexture = resourceData.cameraDepthTexture;
 
             float distanceScale = 1f;
             if (m_Settings.compensateDistance)
@@ -214,84 +380,123 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 distanceScale = reference / depth;
             }
 
-            Vector2 offsetPixels = m_Settings.outlineOffset * distanceScale;
-
-            TextureHandle bodyOrSingleMask;
-            TextureHandle outerMask = TextureHandle.nullHandle;
-            TextureHandle innerMask = TextureHandle.nullHandle;
             bool extruded = m_Settings.useNormalExtrusionMask;
+            TextureHandle bodyMask = TextureHandle.nullHandle;
+            Dictionary<int, TextureHandle> extrusionMasks = null;
 
             if (extruded)
             {
-                float outerExt = m_Settings.normalExtrusionOuter;
-                float innerExt = m_Settings.normalExtrusionInner;
-
-                maskDesc.name = "_CharacterOutlineMaskOuter";
-                outerMask = renderGraph.CreateTexture(maskDesc);
-                maskDesc.name = "_CharacterOutlineMaskInner";
-                innerMask = renderGraph.CreateTexture(maskDesc);
-
-                RecordMaskPass(
-                    renderGraph, frameData, outerMask, sceneDepth,
-                    m_MaskMaterialOuter, outerExt, "CharacterOutline Draw Outer Extruded Mask");
-                RecordMaskPass(
-                    renderGraph, frameData, innerMask, sceneDepth,
-                    m_MaskMaterialInner, innerExt, "CharacterOutline Draw Inner Mask");
-                bodyOrSingleMask = outerMask;
+                extrusionMasks = new Dictionary<int, TextureHandle>();
+                for (int i = 0; i < active.Count; i++)
+                {
+                    OutlineLayer layer = active[i];
+                    EnsureExtrusionMask(renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks, layer.outerExtrusion);
+                    EnsureExtrusionMask(renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks, layer.innerExtrusion);
+                }
             }
             else
             {
                 maskDesc.name = "_CharacterOutlineMask";
-                bodyOrSingleMask = renderGraph.CreateTexture(maskDesc);
-                RecordMaskPass(
-                    renderGraph, frameData, bodyOrSingleMask, sceneDepth,
-                    m_MaskMaterialInner, 0f, "CharacterOutline Draw Body Mask");
+                bodyMask = renderGraph.CreateTexture(maskDesc);
+                RecordMaskPass(renderGraph, frameData, bodyMask, sceneDepth, 0f, "CharacterOutline Draw Body Mask");
             }
-
-            float outerPixels = Mathf.Clamp(Mathf.Max(0f, m_Settings.outerWidth) * distanceScale, 0f, 64f);
-            float innerPixels = Mathf.Clamp(Mathf.Max(0f, m_Settings.innerWidth) * distanceScale, 0f, 64f);
-            if (innerPixels > outerPixels)
-            {
-                float swap = innerPixels;
-                innerPixels = outerPixels;
-                outerPixels = swap;
-            }
-
-            m_OutlineMaterial.SetColor(s_OutlineColorId, m_Settings.outlineColor);
-            m_OutlineMaterial.SetFloat(s_OutlineWidthOuterId, outerPixels);
-            m_OutlineMaterial.SetFloat(s_OutlineWidthInnerId, innerPixels);
-            m_OutlineMaterial.SetVector(s_OutlineOffsetId, offsetPixels);
-            m_OutlineMaterial.SetFloat(s_OutlineIntensityId, m_Settings.intensity);
-            m_OutlineMaterial.SetVector(s_CharacterScreenUVId, characterScreenUV);
-            m_OutlineMaterial.SetFloat(s_UseExtrudedMaskId, extruded ? 1f : 0f);
-            m_OutlineMaterial.SetVector(
-                s_CharacterMaskTexelSizeId,
-                new Vector4(1f / width, 1f / height, width, height));
 
             TextureDesc tempDesc = cameraColor.GetDescriptor(renderGraph);
-            tempDesc.name = "_CharacterOutlineTemp";
             tempDesc.depthBufferBits = DepthBits.None;
             tempDesc.msaaSamples = MSAASamples.None;
             tempDesc.bindTextureMS = false;
             tempDesc.clearBuffer = false;
-            TextureHandle tempColor = renderGraph.CreateTexture(tempDesc);
 
-            TextureHandle cameraDepthTexture = resourceData.cameraDepthTexture;
-            RecordCompositePass(
-                renderGraph,
-                cameraColor,
-                tempColor,
-                bodyOrSingleMask,
-                outerMask,
-                innerMask,
-                cameraDepthTexture,
-                characterScreenUV,
-                outerPixels,
-                innerPixels,
-                offsetPixels,
-                extruded);
+            tempDesc.name = "_CharacterOutlineTempA";
+            TextureHandle tempA = renderGraph.CreateTexture(tempDesc);
+            tempDesc.name = "_CharacterOutlineTempB";
+            TextureHandle tempB = renderGraph.CreateTexture(tempDesc);
 
-            renderGraph.AddBlitPass(tempColor, cameraColor, Vector2.one, Vector2.zero, passName: "CharacterOutline Copy Back");
+            // Seed ping-pong with camera color.
+            renderGraph.AddBlitPass(cameraColor, tempA, Vector2.one, Vector2.zero, passName: "CharacterOutline Seed");
+
+            TextureHandle read = tempA;
+            TextureHandle write = tempB;
+
+            for (int i = 0; i < active.Count; i++)
+            {
+                OutlineLayer layer = active[i];
+                Vector2 offsetPixels = layer.offset * distanceScale;
+
+                TextureHandle outerTex;
+                TextureHandle innerTex;
+                float outerW = 0f;
+                float innerW = 0f;
+
+                if (extruded)
+                {
+                    outerTex = extrusionMasks[ExtrusionKey(layer.outerExtrusion)];
+                    innerTex = extrusionMasks[ExtrusionKey(layer.innerExtrusion)];
+                }
+                else
+                {
+                    outerTex = TextureHandle.nullHandle;
+                    innerTex = TextureHandle.nullHandle;
+                    outerW = Mathf.Clamp(Mathf.Max(0f, layer.outerWidth) * distanceScale, 0f, 64f);
+                    innerW = Mathf.Clamp(Mathf.Max(0f, layer.innerWidth) * distanceScale, 0f, 64f);
+                    if (innerW > outerW)
+                    {
+                        float swap = innerW;
+                        innerW = outerW;
+                        outerW = swap;
+                    }
+                }
+
+                RecordCompositePass(
+                    renderGraph,
+                    read,
+                    write,
+                    bodyMask,
+                    outerTex,
+                    innerTex,
+                    cameraDepthTexture,
+                    characterScreenUV,
+                    maskTexelSize,
+                    m_GetOutlineMaterial(i),
+                    layer.color,
+                    layer.intensity,
+                    outerW,
+                    innerW,
+                    offsetPixels,
+                    extruded,
+                    $"CharacterOutline Composite Layer {i}");
+
+                TextureHandle swapRT = read;
+                read = write;
+                write = swapRT;
+            }
+
+            renderGraph.AddBlitPass(read, cameraColor, Vector2.one, Vector2.zero, passName: "CharacterOutline Copy Back");
+        }
+
+        void EnsureExtrusionMask(
+            RenderGraph renderGraph,
+            ContextContainer frameData,
+            TextureDesc maskDesc,
+            TextureHandle sceneDepth,
+            Dictionary<int, TextureHandle> map,
+            float extrusion)
+        {
+            int key = ExtrusionKey(extrusion);
+            if (map.ContainsKey(key))
+                return;
+
+            maskDesc.name = $"_CharacterOutlineMaskExt_{key}";
+            TextureHandle rt = renderGraph.CreateTexture(maskDesc);
+            RecordMaskPass(
+                renderGraph, frameData, rt, sceneDepth, extrusion,
+                $"CharacterOutline Draw Extrusion {extrusion:0.####}");
+            map[key] = rt;
+        }
+
+        static int ExtrusionKey(float extrusion)
+        {
+            return Mathf.RoundToInt(extrusion * 10000f);
         }
 
         void RecordMaskPass(
@@ -299,12 +504,12 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             ContextContainer frameData,
             TextureHandle characterMask,
             TextureHandle sceneDepth,
-            Material maskMaterial,
             float normalExtrusion,
             string passName)
         {
-            // Must set before CreateRendererList: overrideMaterial CB is captured with the list.
             float useSmoothVC = m_Settings.useSmoothNormalsFromVertexColor ? 1f : 0f;
+            // Dedicated material per extrusion avoids override CB collisions across draws.
+            Material maskMaterial = m_GetMaskMaterial(normalExtrusion);
             maskMaterial.SetFloat(s_NormalExtrusionId, normalExtrusion);
             maskMaterial.SetFloat(s_UseSmoothNormalVCId, useSmoothVC);
 
@@ -328,7 +533,7 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
                 builder.SetRenderFunc(static (DrawPassData data, RasterGraphContext context) =>
                 {
-                    // Global + material: RendererList override sometimes ignores late Material.SetFloat.
+                    // Globals work because shader uniforms are outside UnityPerMaterial.
                     context.cmd.SetGlobalFloat(s_NormalExtrusionId, data.normalExtrusion);
                     context.cmd.SetGlobalFloat(s_UseSmoothNormalVCId, data.useSmoothNormalVC);
                     data.maskMaterial.SetFloat(s_NormalExtrusionId, data.normalExtrusion);
@@ -348,29 +553,35 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             TextureHandle innerMask,
             TextureHandle cameraDepthTexture,
             Vector2 characterScreenUV,
+            Vector4 maskTexelSize,
+            Material outlineMaterial,
+            Color outlineColor,
+            float intensity,
             float outerPixels,
             float innerPixels,
             Vector2 offsetPixels,
-            bool extruded)
+            bool extruded,
+            string passName)
         {
-            using (var builder = renderGraph.AddRasterRenderPass<CompositePassData>(
-                       "CharacterOutline Composite", out var passData))
+            using (var builder = renderGraph.AddRasterRenderPass<CompositePassData>(passName, out var passData))
             {
-                passData.material = m_OutlineMaterial;
+                passData.material = outlineMaterial;
                 passData.bodyMask = bodyMask;
                 passData.outerMask = outerMask;
                 passData.innerMask = innerMask;
                 passData.sourceColor = sourceColor;
-                passData.outlineColor = m_Settings.outlineColor;
+                passData.outlineColor = outlineColor;
                 passData.outerWidth = outerPixels;
                 passData.innerWidth = innerPixels;
                 passData.outlineOffset = offsetPixels;
-                passData.intensity = m_Settings.intensity;
+                passData.intensity = intensity;
                 passData.characterScreenUV = characterScreenUV;
-                passData.texelSize = m_OutlineMaterial.GetVector(s_CharacterMaskTexelSizeId);
+                passData.texelSize = maskTexelSize;
                 passData.useExtrudedMask = extruded ? 1f : 0f;
 
-                builder.UseTexture(bodyMask, AccessFlags.Read);
+                builder.UseTexture(sourceColor, AccessFlags.Read);
+                if (!extruded && bodyMask.IsValid())
+                    builder.UseTexture(bodyMask, AccessFlags.Read);
                 if (extruded)
                 {
                     if (outerMask.IsValid())
@@ -379,15 +590,25 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                         builder.UseTexture(innerMask, AccessFlags.Read);
                 }
 
-                builder.UseTexture(sourceColor, AccessFlags.Read);
                 if (cameraDepthTexture.IsValid())
                     builder.UseTexture(cameraDepthTexture, AccessFlags.Read);
+
                 builder.SetRenderAttachment(destColor, 0, AccessFlags.Write);
                 builder.AllowPassCulling(false);
                 builder.AllowGlobalStateModification(true);
 
                 builder.SetRenderFunc(static (CompositePassData data, RasterGraphContext context) =>
                 {
+                    // Use globals so shared outline material cannot leak layer params across passes.
+                    context.cmd.SetGlobalColor(s_OutlineColorId, data.outlineColor);
+                    context.cmd.SetGlobalFloat(s_OutlineWidthOuterId, data.outerWidth);
+                    context.cmd.SetGlobalFloat(s_OutlineWidthInnerId, data.innerWidth);
+                    context.cmd.SetGlobalVector(s_OutlineOffsetId, data.outlineOffset);
+                    context.cmd.SetGlobalFloat(s_OutlineIntensityId, data.intensity);
+                    context.cmd.SetGlobalVector(s_CharacterScreenUVId, data.characterScreenUV);
+                    context.cmd.SetGlobalVector(s_CharacterMaskTexelSizeId, data.texelSize);
+                    context.cmd.SetGlobalFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
+
                     data.material.SetColor(s_OutlineColorId, data.outlineColor);
                     data.material.SetFloat(s_OutlineWidthOuterId, data.outerWidth);
                     data.material.SetFloat(s_OutlineWidthInnerId, data.innerWidth);
@@ -396,11 +617,15 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     data.material.SetVector(s_CharacterScreenUVId, data.characterScreenUV);
                     data.material.SetVector(s_CharacterMaskTexelSizeId, data.texelSize);
                     data.material.SetFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
-                    context.cmd.SetGlobalTexture(s_CharacterMaskTexId, data.bodyMask);
+
                     if (data.useExtrudedMask > 0.5f)
                     {
                         context.cmd.SetGlobalTexture(s_CharacterMaskOuterTexId, data.outerMask);
                         context.cmd.SetGlobalTexture(s_CharacterMaskInnerTexId, data.innerMask);
+                    }
+                    else
+                    {
+                        context.cmd.SetGlobalTexture(s_CharacterMaskTexId, data.bodyMask);
                     }
 
                     Blitter.BlitTexture(

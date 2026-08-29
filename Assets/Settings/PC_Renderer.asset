@@ -55,20 +55,38 @@ MonoBehaviour:
       serializedVersion: 2
       m_Bits: 64
     useNormalExtrusionMask: 1
-    normalExtrusionOuter: 0.01
-    normalExtrusionInner: 0.005
     useSmoothNormalsFromVertexColor: 1
-    outlineColor: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
-    outerWidth: 4
-    innerWidth: 0
-    outlineOffset: {x: 7.97, y: -3.8}
-    intensity: 1
+    layers:
+    - enabled: 1
+      color: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
+      intensity: 1
+      offset: {x: 7.97, y: -3.8}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.01
+      innerExtrusion: 0.005
+    - enabled: 1
+      color: {r: 0, g: 0.99215686, b: 0.8191634, a: 1}
+      intensity: 1
+      offset: {x: -1.74, y: 3.4}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.01
+      innerExtrusion: 0.007
     compensateDistance: 1
     referenceDistance: 5
     downsample: 0
     renderPassEvent: 550
     outlineShader: {fileID: 4800000, guid: 684fc3509a124569a468592504493c1f, type: 3}
     maskShader: {fileID: 4800000, guid: 6cd9bfd931564e3cbe80fb4c4cd12a85, type: 3}
+    outlineColor: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
+    outerWidth: 4
+    innerWidth: 0
+    outlineOffset: {x: 7.97, y: -3.8}
+    intensity: 1
+    normalExtrusionOuter: 0.01
+    normalExtrusionInner: 0.005
+    legacyMigrated: 1
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

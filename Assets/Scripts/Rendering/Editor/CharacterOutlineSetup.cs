@@ -51,11 +51,11 @@ public static class CharacterOutlineSetup
         outline.settings.maskShader = maskShader;
         int characterLayer = LayerMask.NameToLayer("Character");
         outline.settings.layerMask = characterLayer >= 0 ? 1 << characterLayer : 1 << 6;
-        outline.settings.outlineColor = Color.white;
-        outline.settings.outerWidth = 4f;
-        outline.settings.innerWidth = 0f;
-        outline.settings.outlineOffset = Vector2.zero;
-        outline.settings.intensity = 1f;
+        outline.settings.layers = new System.Collections.Generic.List<CharacterOutlineFeature.OutlineLayer>
+        {
+            CharacterOutlineFeature.OutlineLayer.Default
+        };
+        outline.settings.legacyMigrated = true;
         outline.settings.downsample = 0;
 
         AssetDatabase.AddObjectToAsset(outline, renderer);
