@@ -56,6 +56,8 @@ MonoBehaviour:
       m_Bits: 64
     useNormalExtrusionMask: 1
     useSmoothNormalsFromVertexColor: 1
+    outlineControlMap: {fileID: 0}
+    outlineControlInvert: 0
     layers:
     - enabled: 1
       color: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
@@ -65,6 +67,8 @@ MonoBehaviour:
       innerWidth: 0
       outerExtrusion: 0.01
       innerExtrusion: 0.005
+      controlMapST: {x: 1, y: 1, z: 0, w: 0}
+      controlThreshold: 0.5
     - enabled: 1
       color: {r: 0, g: 0.99215686, b: 0.8191634, a: 1}
       intensity: 1

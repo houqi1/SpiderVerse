@@ -40,6 +40,13 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         [Tooltip("Inner object-space extrusion (0 = body).")]
         public float innerExtrusion;
 
+        [Header("Control Map")]
+        [Tooltip("Tiling (XY) and offset (ZW) for the shared outline control/noise map on this layer.")]
+        public Vector4 controlMapST;
+
+        [Tooltip("outline *= step(threshold, noise) for this layer.")]
+        [Range(0f, 1f)] public float controlThreshold;
+
         public static OutlineLayer Default => new OutlineLayer
         {
             enabled = true,
@@ -50,6 +57,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             innerWidth = 0f,
             outerExtrusion = 0.02f,
             innerExtrusion = 0f,
+            controlMapST = new Vector4(1f, 1f, 0f, 0f),
+            controlThreshold = 0.5f,
         };
     }
 
@@ -65,6 +74,13 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
         [Tooltip("Extrude using smooth normals baked into vertex color (tangent space). Required for correct skinned outlines.")]
         public bool useSmoothNormalsFromVertexColor = false;
+
+        [Header("Outline Control Map")]
+        [Tooltip("Shared noise map. Sampled with mesh UV0 * per-layer tiling/offset (R). Empty = always on.")]
+        public Texture2D outlineControlMap;
+
+        [Tooltip("Invert the step result (outline where noise < threshold).")]
+        public bool outlineControlInvert = false;
 
         [Header("Layers (Scheme 1)")]
         [Tooltip("Each enabled layer draws one ring. Arbitrary count; keep small for performance.")]
@@ -160,9 +176,15 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             m_MaskMaterialPool[key] = mat;
         }
 
+        ApplyMaskMaterialParams(mat, extrusion);
+        return mat;
+    }
+
+    void ApplyMaskMaterialParams(Material mat, float extrusion)
+    {
         mat.SetFloat("_NormalExtrusion", extrusion);
         mat.SetFloat("_UseSmoothNormalVC", settings.useSmoothNormalsFromVertexColor ? 1f : 0f);
-        return mat;
+
     }
 
     Material GetOutlineMaterialForLayer(int layerIndex)
@@ -218,6 +240,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 innerWidth = s.innerWidth,
                 outerExtrusion = s.normalExtrusionOuter,
                 innerExtrusion = s.normalExtrusionInner,
+                controlMapST = new Vector4(1f, 1f, 0f, 0f),
+                controlThreshold = 0.5f,
             });
             s.legacyMigrated = true;
             return;
@@ -249,6 +273,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 L.innerWidth = s.innerWidth;
                 L.outerExtrusion = s.normalExtrusionOuter;
                 L.innerExtrusion = s.normalExtrusionInner;
+                if (L.controlMapST.x == 0f && L.controlMapST.y == 0f)
+                    L.controlMapST = new Vector4(1f, 1f, 0f, 0f);
                 s.layers[0] = L;
             }
 
@@ -296,6 +322,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         static readonly int s_NormalExtrusionId = Shader.PropertyToID("_NormalExtrusion");
         static readonly int s_UseSmoothNormalVCId = Shader.PropertyToID("_UseSmoothNormalVC");
         static readonly int s_UseExtrudedMaskId = Shader.PropertyToID("_UseExtrudedMask");
+        static readonly int s_OutlineControlEnabledId = Shader.PropertyToID("_OutlineControlEnabled");
+        static readonly int s_OutlineControlMapId = Shader.PropertyToID("_OutlineControlMap");
+        static readonly int s_OutlineControlMapSTId = Shader.PropertyToID("_OutlineControlMap_ST");
+        static readonly int s_OutlineControlThresholdId = Shader.PropertyToID("_OutlineControlThreshold");
+        static readonly int s_OutlineControlInvertId = Shader.PropertyToID("_OutlineControlInvert");
 
         static readonly List<ShaderTagId> s_ShaderTagIds = new List<ShaderTagId>
         {
@@ -359,7 +390,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
             var maskDesc = new TextureDesc(width, height)
             {
-                colorFormat = GraphicsFormat.R8_UNorm,
+                // R = coverage, G = mesh U, B = mesh V (per-layer ST applied in composite).
+                colorFormat = GraphicsFormat.R8G8B8A8_UNorm,
                 depthBufferBits = DepthBits.None,
                 msaaSamples = MSAASamples.None,
                 bindTextureMS = false,
@@ -447,6 +479,10 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     }
                 }
 
+                Vector4 controlST = layer.controlMapST;
+                if (controlST.x == 0f && controlST.y == 0f)
+                    controlST = new Vector4(1f, 1f, 0f, 0f);
+
                 RecordCompositePass(
                     renderGraph,
                     read,
@@ -464,6 +500,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     innerW,
                     offsetPixels,
                     extruded,
+                    m_Settings.outlineControlMap != null,
+                    m_Settings.outlineControlMap != null ? m_Settings.outlineControlMap : Texture2D.whiteTexture,
+                    controlST,
+                    layer.controlThreshold,
+                    m_Settings.outlineControlInvert,
                     $"CharacterOutline Composite Layer {i}");
 
                 TextureHandle swapRT = read;
@@ -508,7 +549,6 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             string passName)
         {
             float useSmoothVC = m_Settings.useSmoothNormalsFromVertexColor ? 1f : 0f;
-            // Dedicated material per extrusion avoids override CB collisions across draws.
             Material maskMaterial = m_GetMaskMaterial(normalExtrusion);
             maskMaterial.SetFloat(s_NormalExtrusionId, normalExtrusion);
             maskMaterial.SetFloat(s_UseSmoothNormalVCId, useSmoothVC);
@@ -533,7 +573,6 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
                 builder.SetRenderFunc(static (DrawPassData data, RasterGraphContext context) =>
                 {
-                    // Globals work because shader uniforms are outside UnityPerMaterial.
                     context.cmd.SetGlobalFloat(s_NormalExtrusionId, data.normalExtrusion);
                     context.cmd.SetGlobalFloat(s_UseSmoothNormalVCId, data.useSmoothNormalVC);
                     data.maskMaterial.SetFloat(s_NormalExtrusionId, data.normalExtrusion);
@@ -561,6 +600,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             float innerPixels,
             Vector2 offsetPixels,
             bool extruded,
+            bool controlEnabled,
+            Texture controlMap,
+            Vector4 controlMapST,
+            float controlThreshold,
+            bool controlInvert,
             string passName)
         {
             using (var builder = renderGraph.AddRasterRenderPass<CompositePassData>(passName, out var passData))
@@ -578,6 +622,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 passData.characterScreenUV = characterScreenUV;
                 passData.texelSize = maskTexelSize;
                 passData.useExtrudedMask = extruded ? 1f : 0f;
+                passData.outlineControlEnabled = controlEnabled ? 1f : 0f;
+                passData.outlineControlMap = controlMap;
+                passData.outlineControlMapST = controlMapST;
+                passData.outlineControlThreshold = controlThreshold;
+                passData.outlineControlInvert = controlInvert ? 1f : 0f;
 
                 builder.UseTexture(sourceColor, AccessFlags.Read);
                 if (!extruded && bodyMask.IsValid())
@@ -608,6 +657,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     context.cmd.SetGlobalVector(s_CharacterScreenUVId, data.characterScreenUV);
                     context.cmd.SetGlobalVector(s_CharacterMaskTexelSizeId, data.texelSize);
                     context.cmd.SetGlobalFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
+                    context.cmd.SetGlobalFloat(s_OutlineControlEnabledId, data.outlineControlEnabled);
+                    context.cmd.SetGlobalFloat(s_OutlineControlThresholdId, data.outlineControlThreshold);
+                    context.cmd.SetGlobalFloat(s_OutlineControlInvertId, data.outlineControlInvert);
+                    context.cmd.SetGlobalVector(s_OutlineControlMapSTId, data.outlineControlMapST);
+                    Shader.SetGlobalTexture(s_OutlineControlMapId, data.outlineControlMap);
 
                     data.material.SetColor(s_OutlineColorId, data.outlineColor);
                     data.material.SetFloat(s_OutlineWidthOuterId, data.outerWidth);
@@ -617,6 +671,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     data.material.SetVector(s_CharacterScreenUVId, data.characterScreenUV);
                     data.material.SetVector(s_CharacterMaskTexelSizeId, data.texelSize);
                     data.material.SetFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
+                    data.material.SetFloat(s_OutlineControlEnabledId, data.outlineControlEnabled);
+                    data.material.SetFloat(s_OutlineControlThresholdId, data.outlineControlThreshold);
+                    data.material.SetFloat(s_OutlineControlInvertId, data.outlineControlInvert);
+                    data.material.SetVector(s_OutlineControlMapSTId, data.outlineControlMapST);
+                    data.material.SetTexture(s_OutlineControlMapId, data.outlineControlMap);
 
                     if (data.useExtrudedMask > 0.5f)
                     {
@@ -725,6 +784,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             public Vector2 characterScreenUV;
             public Vector4 texelSize;
             public float useExtrudedMask;
+            public float outlineControlEnabled;
+            public Texture outlineControlMap;
+            public Vector4 outlineControlMapST;
+            public float outlineControlThreshold;
+            public float outlineControlInvert;
         }
     }
 }

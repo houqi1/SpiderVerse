@@ -2,8 +2,6 @@ Shader "Hidden/Custom/CharacterOutlineMask"
 {
     Properties
     {
-        // Declared for inspector/debug; runtime values are set as globals / material floats
-        // outside UnityPerMaterial so per-draw overrides work with RendererList.
         _NormalExtrusion ("Normal Extrusion", Float) = 0
         _UseSmoothNormalVC ("Use Smooth Normal Vertex Color", Float) = 0
     }
@@ -31,7 +29,7 @@ Shader "Hidden/Custom/CharacterOutlineMask"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // NOT in UnityPerMaterial: must accept cmd.SetGlobalFloat per draw.
+            // Outside UnityPerMaterial so per-draw SetGlobal* works with RendererList.
             float _NormalExtrusion;
             float _UseSmoothNormalVC;
 
@@ -41,17 +39,17 @@ Shader "Hidden/Custom/CharacterOutlineMask"
                 float3 normalOS : NORMAL;
                 float4 tangentOS : TANGENT;
                 float4 color : COLOR;
+                float2 uv0 : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
+                float2 uv0 : TEXCOORD0;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
-            // Skinned meshes: skinning updates Position/Normal/Tangent only.
-            // Smooth normals are baked into vertex color as tangent-space (0..1).
             float3 GetExtrusionNormalOS(Attributes input)
             {
                 float3 normalOS = input.normalOS;
@@ -97,12 +95,15 @@ Shader "Hidden/Custom/CharacterOutlineMask"
                 posOS += n * _NormalExtrusion;
 
                 output.positionCS = TransformObjectToHClip(posOS);
+                // Store raw mesh UV0; per-layer tiling/offset applied in composite.
+                output.uv0 = input.uv0;
                 return output;
             }
 
-            float Frag(Varyings input) : SV_Target
+            // R = coverage, G = mesh UV0.x, B = mesh UV0.y
+            float4 Frag(Varyings input) : SV_Target
             {
-                return 1.0;
+                return float4(1.0, saturate(input.uv0.x), saturate(input.uv0.y), 1.0);
             }
             ENDHLSL
         }
