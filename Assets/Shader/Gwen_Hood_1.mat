@@ -17,7 +17,7 @@ Material:
   - _LAMBERT_PERTURB_ON
   - _LAMBERT_PERTURB_SWAP_UV
   - _OVERLAYBLENDMODE_MULTIPLY
-  - _SPMAPCHANNEL_R
+  - _SPMAPCHANNEL_G
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0

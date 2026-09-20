@@ -32,13 +32,18 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: hero_spidergwen01_S03_head02_face
-    second: {fileID: 2100000, guid: d2b3c4d5e6f7890123456789abcdef02, type: 2}
+      name: hero_spidergwen01_S03_body_pink
+    second: {fileID: 2100000, guid: e1a2b3c4d5e6f708192a3b4c5d6e7f80, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: hero_spidergwen01_S03_head02_hair
-    second: {fileID: 2100000, guid: d3c4d5e6f708901234567890abcdef03, type: 2}
+      name: hero_spidergwen01_S03_body_white
+    second: {fileID: 2100000, guid: e2b3c4d5e6f708192a3b4c5d6e7f8191, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: hero_spidergwen01_S03_body_wristband
+    second: {fileID: 2100000, guid: e3c4d5e6f708192a3b4c5d6e7f8192a2, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
@@ -52,18 +57,13 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: hero_spidergwen01_S03_body_pink
-    second: {fileID: 2100000, guid: e1a2b3c4d5e6f708192a3b4c5d6e7f80, type: 2}
+      name: hero_spidergwen01_S03_head02_face
+    second: {fileID: 2100000, guid: d2b3c4d5e6f7890123456789abcdef02, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: hero_spidergwen01_S03_body_white
-    second: {fileID: 2100000, guid: e2b3c4d5e6f708192a3b4c5d6e7f8191, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: hero_spidergwen01_S03_body_wristband
-    second: {fileID: 2100000, guid: e3c4d5e6f708192a3b4c5d6e7f8192a2, type: 2}
+      name: hero_spidergwen01_S03_head02_hair
+    second: {fileID: 2100000, guid: d3c4d5e6f708901234567890abcdef03, type: 2}
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
@@ -95,7 +95,7 @@ ModelImporter:
     extraExposedTransformPaths: []
     extraUserProperties: []
     clipAnimations: []
-    isReadable: 0
+    isReadable: 1
   meshes:
     lODScreenPercentages: []
     globalScale: 1

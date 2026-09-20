@@ -16,6 +16,8 @@ TEXTURE2D(_SpMap);
 SAMPLER(sampler_SpMap);
 TEXTURE2D(_ColorMaskMap);
 SAMPLER(sampler_ColorMaskMap);
+TEXTURE2D(_DetailMap);
+SAMPLER(sampler_DetailMap);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
@@ -24,6 +26,7 @@ CBUFFER_START(UnityPerMaterial)
     float4 _ExtraMap_ST;
     float4 _SpMap_ST;
     float4 _ColorMaskMap_ST;
+    float4 _DetailMap_ST;
     half4 _BaseColor;
     half4 _ShadeColor;
     half4 _OverlayColorA;
@@ -54,6 +57,8 @@ CBUFFER_START(UnityPerMaterial)
     half _ColorMaskMix;
     half _ColorMaskStrength;
     half _OutputColorMask;
+    half _OutputDetailMap;
+    half _DetailMapThreshold;
 CBUFFER_END
 
 #endif

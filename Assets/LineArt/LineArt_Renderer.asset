@@ -1,0 +1,270 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-8009497109252560850
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26c453e5fecb4cce9fefc0e6a64a491e, type: 3}
+  m_Name: OuterGlowFeature
+  m_EditorClassIdentifier: 
+  m_Active: 0
+  settings:
+    layerMask:
+      serializedVersion: 2
+      m_Bits: 64
+    bloomThreshold: 0.66
+    bloomKnee: 0
+    intensity: 4.1
+    blurAmount: 0.005
+    baseUVOffset: {x: 0, y: 0.02}
+    uvOffset: {x: 0, y: 0.07}
+    offsetStrengthMap: {fileID: 2800000, guid: 6bb65bef16bdd4e4e9a4c215f8a2a805, type: 3}
+    offsetStrengthMapST: {x: 3296.5, y: 1, z: 0, w: 0}
+    offsetStrengthMapST2: {x: 11.91, y: 1, z: 0, w: 0}
+    offsetStrengthSmoothstepEdge0: 0
+    offsetStrengthSmoothstepEdge1: 0.224
+    useStabilizedScreenUV: 1
+    stabilizeDistanceCompensation: 1
+    stabilizedReferenceDistance: 1153.9
+    useDerivativeScale: 0
+    maskErode: 1
+    maskSoftness: 0.35
+    downsample: 2
+    renderPassEvent: 550
+    shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
+--- !u!114 &-6102837461928374651
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 942df0065c144444a5b9c2596f1ee94a, type: 3}
+  m_Name: CharacterOutlineFeature
+  m_EditorClassIdentifier: 
+  m_Active: 0
+  settings:
+    layerMask:
+      serializedVersion: 2
+      m_Bits: 64
+    useNormalExtrusionMask: 1
+    useSmoothNormalsFromVertexColor: 1
+    outlineFresnelIntensity: 0
+    outlineFresnelPower: 1.48
+    outlineControlMap: {fileID: 2800000, guid: 7cb95fd13d2a6094fbaf869ba1d4ac38, type: 3}
+    outlineControlInvert: 0
+    layers:
+    - enabled: 1
+      color: {r: 0.63943386, g: 0, b: 0.7490196, a: 1}
+      intensity: 1.44
+      offset: {x: 3.31, y: -3.8}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.013
+      innerExtrusion: 0.005
+      depthOffset: 0
+      controlAffectsOpacity: 0
+      controlMapST: {x: 1, y: 1, z: 0, w: 0}
+      controlThreshold: 0.669
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0.12, y: 1.43}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 5.36, y: 0, z: 0, w: 0}
+      extrusionNoiseStrength: 1
+    - enabled: 0
+      color: {r: 0, g: 0.99215686, b: 0.8191634, a: 1}
+      intensity: 1
+      offset: {x: 2.53, y: 3.4}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.01
+      innerExtrusion: 0.006
+      depthOffset: 0
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.18, y: -0.08, z: 1.19, w: 0}
+      controlThreshold: 0.309
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.76
+    - enabled: 0
+      color: {r: 0, g: 0, b: 0, a: 1}
+      intensity: 1
+      offset: {x: 0, y: 0}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.007
+      innerExtrusion: 0.003
+      depthOffset: 0
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.64, y: 0.03, z: 0, w: 0}
+      controlThreshold: 0
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.52
+    - enabled: 0
+      color: {r: 0.8027793, g: 0.4091395, b: 0, a: 1}
+      intensity: 1.16
+      offset: {x: -2.67, y: 3.4}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.01
+      innerExtrusion: 0
+      depthOffset: 0
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.01, y: 0.17, z: 0, w: 0}
+      controlThreshold: 0.132
+      controlInvert: 1
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.14
+    compensateDistance: 1
+    referenceDistance: 5
+    downsample: 0
+    renderPassEvent: 550
+    outlineShader: {fileID: 4800000, guid: 684fc3509a124569a468592504493c1f, type: 3}
+    maskShader: {fileID: 4800000, guid: 6cd9bfd931564e3cbe80fb4c4cd12a85, type: 3}
+    outlineColor: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
+    outerWidth: 4
+    innerWidth: 0
+    outlineOffset: {x: 7.97, y: -3.8}
+    intensity: 1
+    normalExtrusionOuter: 0.01
+    normalExtrusionInner: 0.005
+    legacyMigrated: 1
+    controlOpacityToggleMigrated: 1
+    controlInvertMigrated: 1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de640fe3d0db1804a85f9fc8f5cadab6, type: 3}
+  m_Name: LineArt_Renderer
+  m_EditorClassIdentifier: 
+  debugShaders:
+    debugReplacementPS: {fileID: 4800000, guid: cf852408f2e174538bcd9b7fda1c5ae7, type: 3}
+    hdrDebugViewPS: {fileID: 4800000, guid: 573620ae32aec764abd4d728906d2587, type: 3}
+    probeVolumeSamplingDebugComputeShader: {fileID: 7200000, guid: 53626a513ea68ce47b59dc1299fe3959, type: 3}
+  probeVolumeResources:
+    probeVolumeDebugShader: {fileID: 4800000, guid: e5c6678ed2aaa91408dd3df699057aae, type: 3}
+    probeVolumeFragmentationDebugShader: {fileID: 4800000, guid: 03cfc4915c15d504a9ed85ecc404e607, type: 3}
+    probeVolumeOffsetDebugShader: {fileID: 4800000, guid: 53a11f4ebaebf4049b3638ef78dc9664, type: 3}
+    probeVolumeSamplingDebugShader: {fileID: 4800000, guid: 8f96cd657dc40064aa21efcc7e50a2e7, type: 3}
+    probeSamplingDebugMesh: {fileID: -3555484719484374845, guid: 57d7c4c16e2765b47a4d2069b311bffe, type: 3}
+    probeSamplingDebugTexture: {fileID: 2800000, guid: 24ec0e140fb444a44ab96ee80844e18e, type: 3}
+    probeVolumeBlendStatesCS: {fileID: 7200000, guid: b9a23f869c4fd45f19c5ada54dd82176, type: 3}
+  m_RendererFeatures:
+  - {fileID: 7833122117494664109}
+  - {fileID: -8009497109252560850}
+  - {fileID: -6102837461928374651}
+  - {fileID: 5303485742155498541}
+  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eab
+  m_UseNativeRenderPass: 1
+  xrSystemData: {fileID: 0}
+  postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
+  m_AssetVersion: 2
+  m_OpaqueLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_TransparentLayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_DefaultStencilState:
+    overrideStencilState: 0
+    stencilReference: 1
+    stencilCompareFunction: 3
+    passOperation: 2
+    failOperation: 0
+    zFailOperation: 0
+  m_ShadowTransparentReceive: 1
+  m_RenderingMode: 2
+  m_DepthPrimingMode: 0
+  m_CopyDepthMode: 0
+  m_DepthAttachmentFormat: 0
+  m_DepthTextureFormat: 0
+  m_AccurateGbufferNormals: 0
+  m_IntermediateTextureMode: 0
+--- !u!114 &5303485742155498541
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2971694ab2ebad45b7e7aa56a509b27, type: 3}
+  m_Name: Object Line Art
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  strokeShader: {fileID: 4800000, guid: b09e31b29b31555459826dc57284dfb1, type: 3}
+  settings:
+    contour: 1
+    crease: 1
+    materialBorders: 1
+    boundaries: 0
+    intersections: 1
+    occlusion: 1
+    creaseAngle: 120
+    color: {r: 0.188, g: 0.157, b: 0.125, a: 1}
+    thickness: 2
+    thicknessCurve: 1
+    endTaper: 0.25
+    thicknessTransition: 1
+    lengthTrim: 0
+    lengthRandomness: 0.4
+    noise: 0
+    offset: {x: 0, y: 0}
+    texture: {fileID: 0}
+    darkOnWhiteMask: 0
+    textureStrength: 1
+    textureRepeats: 1
+    updateRate: 30
+    occluderLayers:
+      serializedVersion: 2
+      m_Bits: 4294967295
+    depthEpsilon: 0.00001
+  showInSceneView: 1
+  lastStats: 
+--- !u!114 &7833122117494664109
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f62c9c65cf3354c93be831c8bc075510, type: 3}
+  m_Name: ScreenSpaceAmbientOcclusion
+  m_EditorClassIdentifier: 
+  m_Active: 0
+  m_Settings:
+    AOMethod: 0
+    Downsample: 0
+    AfterOpaque: 0
+    Source: 1
+    NormalSamples: 1
+    Intensity: 0.4
+    DirectLightingStrength: 0.25
+    Radius: 0.3
+    Samples: 1
+    BlurQuality: 0
+    Falloff: 100
+    SampleCount: -1

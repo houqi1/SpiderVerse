@@ -56,27 +56,75 @@ MonoBehaviour:
       m_Bits: 64
     useNormalExtrusionMask: 1
     useSmoothNormalsFromVertexColor: 1
-    outlineControlMap: {fileID: 0}
+    outlineFresnelIntensity: 0
+    outlineFresnelPower: 1.48
+    outlineControlMap: {fileID: 2800000, guid: 7cb95fd13d2a6094fbaf869ba1d4ac38, type: 3}
     outlineControlInvert: 0
     layers:
     - enabled: 1
-      color: {r: 0.9924528, g: 0, b: 0.8154531, a: 1}
-      intensity: 1
-      offset: {x: 7.97, y: -3.8}
+      color: {r: 0.63943386, g: 0, b: 0.7490196, a: 1}
+      intensity: 1.44
+      offset: {x: 3.31, y: -3.8}
       outerWidth: 4
       innerWidth: 0
-      outerExtrusion: 0.01
+      outerExtrusion: 0.013
       innerExtrusion: 0.005
+      controlAffectsOpacity: 0
       controlMapST: {x: 1, y: 1, z: 0, w: 0}
-      controlThreshold: 0.5
-    - enabled: 1
+      controlThreshold: 0.669
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0.12, y: 1.43}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 5.36, y: 0, z: 0, w: 0}
+      extrusionNoiseStrength: 1
+    - enabled: 0
       color: {r: 0, g: 0.99215686, b: 0.8191634, a: 1}
       intensity: 1
-      offset: {x: -1.74, y: 3.4}
+      offset: {x: 2.53, y: 3.4}
       outerWidth: 4
       innerWidth: 0
       outerExtrusion: 0.01
-      innerExtrusion: 0.007
+      innerExtrusion: 0.006
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.18, y: -0.08, z: 1.19, w: 0}
+      controlThreshold: 0.309
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.76
+    - enabled: 0
+      color: {r: 0, g: 0, b: 0, a: 1}
+      intensity: 1
+      offset: {x: 0, y: 0}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.007
+      innerExtrusion: 0.003
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.64, y: 0.03, z: 0, w: 0}
+      controlThreshold: 0
+      controlInvert: 0
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.52
+    - enabled: 0
+      color: {r: 0.8027793, g: 0.4091395, b: 0, a: 1}
+      intensity: 1.16
+      offset: {x: -2.67, y: 3.4}
+      outerWidth: 4
+      innerWidth: 0
+      outerExtrusion: 0.01
+      innerExtrusion: 0
+      controlAffectsOpacity: 0
+      controlMapST: {x: 0.01, y: 0.17, z: 0, w: 0}
+      controlThreshold: 0.132
+      controlInvert: 1
+      controlScrollAmplitude: {x: 0, y: 0}
+      controlScrollFrequency: 0
+      extrusionControlMapST: {x: 1, y: 1, z: 0, w: 0}
+      extrusionNoiseStrength: 0.14
     compensateDistance: 1
     referenceDistance: 5
     downsample: 0
@@ -91,6 +139,8 @@ MonoBehaviour:
     normalExtrusionOuter: 0.01
     normalExtrusionInner: 0.005
     legacyMigrated: 1
+    controlOpacityToggleMigrated: 1
+    controlInvertMigrated: 1
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0

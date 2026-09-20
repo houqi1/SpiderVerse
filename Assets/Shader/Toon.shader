@@ -46,6 +46,11 @@ Shader "Custom/Toon"
         _ColorMaskStrength ("Color Mask Strength", Range(0, 1)) = 1
         [Toggle(_OUTPUT_COLOR_MASK)] _OutputColorMask ("Output Color Mask", Float) = 0
 
+        [Header(Detail Map)]
+        _DetailMap ("Detail Map", 2D) = "white" {}
+        _DetailMapThreshold ("Detail Map Threshold", Range(0, 1)) = 0.5
+        [Toggle(_OUTPUT_DETAIL_MAP)] _OutputDetailMap ("Output Detail Map", Float) = 0
+
         [Header(Lambert Perturb)]
         [Toggle(_LAMBERT_PERTURB_ON)] _LambertPerturbOn ("Enable Lambert Perturb", Float) = 0
         [Toggle(_LAMBERT_PERTURB_DEBUG)] _LambertPerturbDebug ("Output Perturb Map", Float) = 0
@@ -101,6 +106,7 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _SPMAPCHANNEL_R _SPMAPCHANNEL_G _SPMAPCHANNEL_B _SPMAPCHANNEL_A
             #pragma shader_feature_local _OUTPUT_WRAP_TOON
             #pragma shader_feature_local _OUTPUT_COLOR_MASK
+            #pragma shader_feature_local _OUTPUT_DETAIL_MAP
             #pragma shader_feature_local _OVERLAYBLENDMODE_MULTIPLY _OVERLAYBLENDMODE_ADD
             #pragma shader_feature_local _SHADE_FROM_AMBIENT
 
@@ -123,9 +129,10 @@ Shader "Custom/Toon"
                 float2 uvExtra : TEXCOORD2;
                 float2 uvSp : TEXCOORD3;
                 float2 uvColorMask : TEXCOORD4;
-                float3 positionWS : TEXCOORD5;
-                float3 normalWS : TEXCOORD6;
-                float fogFactor : TEXCOORD7;
+                float2 uvDetail : TEXCOORD5;
+                float3 positionWS : TEXCOORD6;
+                float3 normalWS : TEXCOORD7;
+                float fogFactor : TEXCOORD8;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -210,6 +217,7 @@ Shader "Custom/Toon"
                 output.uvExtra = TRANSFORM_TEX(input.uv, _ExtraMap);
                 output.uvSp = TRANSFORM_TEX(input.uv, _SpMap);
                 output.uvColorMask = TRANSFORM_TEX(input.uv, _ColorMaskMap);
+                output.uvDetail = TRANSFORM_TEX(input.uv, _DetailMap);
                 output.fogFactor = ComputeFogFactor(posInputs.positionCS.z);
                 return output;
             }
@@ -275,6 +283,12 @@ Shader "Custom/Toon"
             half3 BlendMultiplyLayer(half3 baseColor, half3 layerColor, half strength)
             {
                 return lerp(baseColor, baseColor * layerColor, saturate(strength));
+            }
+
+            half SampleDetailStep(float2 uv)
+            {
+                half noise = saturate(SAMPLE_TEXTURE2D(_DetailMap, sampler_DetailMap, uv).r);
+                return step(saturate(_DetailMapThreshold), noise);
             }
 
             half SampleSpMapChannel(half4 spSample)
@@ -357,6 +371,9 @@ Shader "Custom/Toon"
             #elif defined(_OUTPUT_COLOR_MASK)
                 half mask = SAMPLE_TEXTURE2D(_ColorMaskMap, sampler_ColorMaskMap, input.uvColorMask).r;
                 return half4(mask, mask, mask, 1.0h);
+            #elif defined(_OUTPUT_DETAIL_MAP)
+                half detailStep = SampleDetailStep(input.uvDetail);
+                return half4(detailStep, detailStep, detailStep, 1.0h);
             #else
                 half4 uvMapSample = SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uvMap);
                 half4 extraMapSample = SAMPLE_TEXTURE2D(_ExtraMap, sampler_ExtraMap, input.uvExtra);
@@ -418,6 +435,7 @@ Shader "Custom/Toon"
                 color = BlendOverlayMap(color, uvMapSample, _OverlayBlendStrength);
                 color = BlendMultiplyLayer(color, wrapFactor, _WrapToonStrength);
                 color = ApplyColorMask(color, albedo, colorMask);
+                color *= SampleDetailStep(input.uvDetail);
                 color = MixFog(color, input.fogFactor);
                 return half4(color, alpha);
             #endif

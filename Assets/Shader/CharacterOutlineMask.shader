@@ -3,7 +3,11 @@ Shader "Hidden/Custom/CharacterOutlineMask"
     Properties
     {
         _NormalExtrusion ("Normal Extrusion", Float) = 0
+        _DepthOffset ("Depth Offset", Float) = 0
         _UseSmoothNormalVC ("Use Smooth Normal Vertex Color", Float) = 0
+        _OutlineControlMap ("Outline Control Map", 2D) = "white" {}
+        _OutlineControlEnabled ("Outline Control Enabled", Float) = 0
+        _ExtrusionNoiseStrength ("Extrusion Noise Strength", Float) = 0
     }
 
     SubShader
@@ -31,7 +35,14 @@ Shader "Hidden/Custom/CharacterOutlineMask"
 
             // Outside UnityPerMaterial so per-draw SetGlobal* works with RendererList.
             float _NormalExtrusion;
+            float _DepthOffset;
             float _UseSmoothNormalVC;
+            float _OutlineControlEnabled;
+            float _ExtrusionNoiseStrength;
+            float4 _OutlineControlMap_ST;
+
+            TEXTURE2D(_OutlineControlMap);
+            SAMPLER(sampler_OutlineControlMap);
 
             struct Attributes
             {
@@ -40,15 +51,27 @@ Shader "Hidden/Custom/CharacterOutlineMask"
                 float4 tangentOS : TANGENT;
                 float4 color : COLOR;
                 float2 uv0 : TEXCOORD0;
+                float2 uv1 : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv0 : TEXCOORD0;
+                float2 uv1 : TEXCOORD0;
+                float fresnel : TEXCOORD1;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
+
+            // Extrusion scale only: raw noise * ST. No threshold / scroll / invert.
+            float SampleExtrusionNoise(float2 meshUV)
+            {
+                if (_OutlineControlEnabled < 0.5)
+                    return 1.0;
+
+                float2 noiseUV = meshUV * _OutlineControlMap_ST.xy + _OutlineControlMap_ST.zw;
+                return saturate(SAMPLE_TEXTURE2D_LOD(_OutlineControlMap, sampler_OutlineControlMap, noiseUV, 0).r);
+            }
 
             float3 GetExtrusionNormalOS(Attributes input)
             {
@@ -92,18 +115,33 @@ Shader "Hidden/Custom/CharacterOutlineMask"
 
                 float3 posOS = input.positionOS.xyz;
                 float3 n = GetExtrusionNormalOS(input);
-                posOS += n * _NormalExtrusion;
+                float noise = SampleExtrusionNoise(input.uv1);
+                // 0 = uniform extrusion. 1 = scale in [0, 2]. Unbounded strength
+                // swings around the base amount: scale = 1 + (2*noise - 1) * strength.
+                float scale = 1.0 + (noise * 2.0 - 1.0) * _ExtrusionNoiseStrength;
+                posOS += n * (_NormalExtrusion * scale);
 
-                output.positionCS = TransformObjectToHClip(posOS);
-                // Store raw mesh UV0; per-layer tiling/offset applied in composite.
-                output.uv0 = input.uv0;
+                float3 posWS = TransformObjectToWorld(posOS);
+                float3 nWS = TransformObjectToWorldNormal(n);
+                float nLen = length(nWS);
+                nWS = nLen > 1e-6 ? nWS / nLen : float3(0.0, 0.0, 1.0);
+                float3 viewWS = _WorldSpaceCameraPos.xyz - posWS;
+                float vLen = length(viewWS);
+                viewWS = vLen > 1e-6 ? viewWS / vLen : float3(0.0, 0.0, 1.0);
+                // 0 = facing camera (center), 1 = grazing (rim).
+                output.fresnel = saturate(1.0 - saturate(dot(nWS, viewWS)));
+
+                // Per-layer depth bias along view axis (meters). Positive = toward camera.
+                posWS += viewWS * _DepthOffset;
+                output.positionCS = TransformWorldToHClip(posWS);
+                output.uv1 = input.uv1;
                 return output;
             }
 
-            // R = coverage, G = mesh UV0.x, B = mesh UV0.y
+            // R = coverage, G = mesh UV1.x, B = mesh UV1.y, A = raw fresnel (1 - N·V)
             float4 Frag(Varyings input) : SV_Target
             {
-                return float4(1.0, saturate(input.uv0.x), saturate(input.uv0.y), 1.0);
+                return float4(1.0, saturate(input.uv1.x), saturate(input.uv1.y), saturate(input.fresnel));
             }
             ENDHLSL
         }

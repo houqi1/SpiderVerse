@@ -17,7 +17,7 @@ Material:
   - _LAMBERT_PERTURB_ON
   - _LAMBERT_PERTURB_SWAP_UV
   - _OVERLAYBLENDMODE_MULTIPLY
-  - _SPMAPCHANNEL_G
+  - _SPMAPCHANNEL_A
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -36,6 +36,10 @@ Material:
     - _ColorMaskMap:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMap:
+        m_Texture: {fileID: 2800000, guid: e2fc0c5e8ee52394397d8df7d78947d0, type: 3}
+        m_Scale: {x: 0.01, y: 0.69}
         m_Offset: {x: 0, y: 0}
     - _ExtraMap:
         m_Texture: {fileID: 2800000, guid: 7d76b48f71e64ff4982345a0bd9adde9, type: 3}
@@ -59,6 +63,7 @@ Material:
     - _ColorMaskMix: 0.5
     - _ColorMaskStrength: 1
     - _Cull: 2
+    - _DetailMapThreshold: 0.074
     - _ExtraDarkStrength: 0.6
     - _LambertPerturbDebug: 0
     - _LambertPerturbMode: 1
@@ -68,6 +73,7 @@ Material:
     - _LambertPerturbSwapUV: 1
     - _LambertPerturbWidth: 0.527
     - _OutputColorMask: 0
+    - _OutputDetailMap: 0
     - _OutputExtraMap: 0
     - _OutputOverlayMap: 0
     - _OutputSpMap: 0
@@ -77,7 +83,8 @@ Material:
     - _ShadeFromAmbient: 0
     - _ShadeSmooth: 0.054
     - _ShadeThreshold: 0.5
-    - _SpMapChannel: 1
+    - _SpMapChannel: 3
+    - _SpMapThreshold: 0
     - _WrapAmount: 0.5
     - _WrapShadeSmooth: 0.02
     - _WrapShadeThreshold: 0.096

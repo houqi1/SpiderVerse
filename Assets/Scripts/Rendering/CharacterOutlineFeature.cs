@@ -39,13 +39,34 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         public float outerExtrusion;
         [Tooltip("Inner object-space extrusion (0 = body).")]
         public float innerExtrusion;
+        [Tooltip("View-space depth bias in meters for this layer's extrusion masks. Positive = toward camera (easier to pass ZTest / show through occluders). Negative = away from camera. Screen Expand mode ignores this.")]
+        public float depthOffset;
 
-        [Header("Control Map")]
-        [Tooltip("Tiling (XY) and offset (ZW) for the shared outline control/noise map on this layer.")]
+        [Header("Control Map — Outline Opacity")]
+        [Tooltip("On: after threshold, noise also remaps outline opacity. Off: threshold still gates where the outline exists, but those pixels stay fully opaque.")]
+        public bool controlAffectsOpacity;
+
+        [Tooltip("Tiling (XY) and offset (ZW) for outline opacity/gate on this layer.")]
         public Vector4 controlMapST;
 
-        [Tooltip("outline *= step(threshold, noise) for this layer.")]
+        [Tooltip("Outline opacity: noise >= threshold starts the outline; higher noise => higher opacity.")]
         [Range(0f, 1f)] public float controlThreshold;
+
+        [Tooltip("On: outline where noise < threshold; opacity (if enabled) rises toward noise = 0.")]
+        public bool controlInvert;
+
+        [Tooltip("Outline opacity UV jump per scroll step (XY).")]
+        public Vector2 controlScrollAmplitude;
+
+        [Tooltip("Outline opacity scroll steps per second. 0 = no scroll.")]
+        [Min(0f)] public float controlScrollFrequency;
+
+        [Header("Control Map — Extrusion Amount")]
+        [Tooltip("Tiling (XY) and offset (ZW) for vertex extrusion noise.")]
+        public Vector4 extrusionControlMapST;
+
+        [Tooltip("Extrusion perturbation strength. 0 = none (full uniform extrusion). 1 = scale from 0x to 2x around the base amount. Unbounded — large values swing extrusion much farther in both directions.")]
+        public float extrusionNoiseStrength;
 
         public static OutlineLayer Default => new OutlineLayer
         {
@@ -57,8 +78,15 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             innerWidth = 0f,
             outerExtrusion = 0.02f,
             innerExtrusion = 0f,
+            depthOffset = 0f,
+            controlAffectsOpacity = true,
             controlMapST = new Vector4(1f, 1f, 0f, 0f),
             controlThreshold = 0.5f,
+            controlInvert = false,
+            controlScrollAmplitude = Vector2.zero,
+            controlScrollFrequency = 0f,
+            extrusionControlMapST = new Vector4(1f, 1f, 0f, 0f),
+            extrusionNoiseStrength = 0f,
         };
     }
 
@@ -75,12 +103,18 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         [Tooltip("Extrude using smooth normals baked into vertex color (tangent space). Required for correct skinned outlines.")]
         public bool useSmoothNormalsFromVertexColor = false;
 
+        [Header("Fresnel (Shared)")]
+        [Tooltip("Multiplied onto the outline control map before threshold. Facing → 0, grazing → 1. 0 = off. Shared by all layers.")]
+        [Range(0f, 1f)] public float outlineFresnelIntensity = 1f;
+
+        [Tooltip("Higher = tighter white rim on the combined control.")]
+        [Min(0.01f)] public float outlineFresnelPower = 2f;
+
         [Header("Outline Control Map")]
-        [Tooltip("Shared noise map. Sampled with mesh UV0 * per-layer tiling/offset (R). Empty = always on.")]
+        [Tooltip("Shared noise map (R), sampled with mesh UV1. Used by extrusion and opacity with per-layer ST/threshold/scroll. Empty = always on.")]
         public Texture2D outlineControlMap;
 
-        [Tooltip("Invert the step result (outline where noise < threshold).")]
-        public bool outlineControlInvert = false;
+        [HideInInspector] public bool outlineControlInvert = false;
 
         [Header("Layers (Scheme 1)")]
         [Tooltip("Each enabled layer draws one ring. Arbitrary count; keep small for performance.")]
@@ -113,6 +147,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         [HideInInspector] public float normalExtrusionOuter = 0.02f;
         [HideInInspector] public float normalExtrusionInner = 0f;
         [HideInInspector] public bool legacyMigrated;
+        [HideInInspector] public bool controlOpacityToggleMigrated;
+        [HideInInspector] public bool controlInvertMigrated;
     }
 
     public Settings settings = new Settings();
@@ -167,24 +203,53 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         m_Pass.renderPassEvent = settings.renderPassEvent;
     }
 
-    Material GetOrCreateMaskMaterial(float extrusion)
+    struct MaskControlParams
     {
-        int key = Mathf.RoundToInt(extrusion * 10000f);
+        public float extrusion;
+        public float depthOffset;
+        public float noiseStrength;
+        public bool controlEnabled;
+        public Texture controlMap;
+        public Vector4 controlMapST;
+        public int CacheKey
+        {
+            get
+            {
+                unchecked
+                {
+                    int h = Mathf.RoundToInt(extrusion * 10000f);
+                    h = h * 397 ^ Mathf.RoundToInt(depthOffset * 10000f);
+                    h = h * 397 ^ Mathf.RoundToInt(noiseStrength * 1000f);
+                    h = h * 397 ^ controlMapST.GetHashCode();
+                    h = h * 397 ^ (controlEnabled ? 1 : 0);
+                    return h;
+                }
+            }
+        }
+    }
+
+    Material GetOrCreateMaskMaterial(MaskControlParams p)
+    {
+        int key = p.CacheKey;
         if (!m_MaskMaterialPool.TryGetValue(key, out Material mat) || mat == null)
         {
             mat = CoreUtils.CreateEngineMaterial(settings.maskShader);
             m_MaskMaterialPool[key] = mat;
         }
 
-        ApplyMaskMaterialParams(mat, extrusion);
+        ApplyMaskMaterialParams(mat, p);
         return mat;
     }
 
-    void ApplyMaskMaterialParams(Material mat, float extrusion)
+    void ApplyMaskMaterialParams(Material mat, MaskControlParams p)
     {
-        mat.SetFloat("_NormalExtrusion", extrusion);
+        mat.SetFloat("_NormalExtrusion", p.extrusion);
+        mat.SetFloat("_DepthOffset", p.depthOffset);
         mat.SetFloat("_UseSmoothNormalVC", settings.useSmoothNormalsFromVertexColor ? 1f : 0f);
-
+        mat.SetFloat("_OutlineControlEnabled", p.controlEnabled ? 1f : 0f);
+        mat.SetTexture("_OutlineControlMap", p.controlMap != null ? p.controlMap : Texture2D.whiteTexture);
+        mat.SetVector("_OutlineControlMap_ST", p.controlMapST);
+        mat.SetFloat("_ExtrusionNoiseStrength", p.noiseStrength);
     }
 
     Material GetOutlineMaterialForLayer(int layerIndex)
@@ -240,10 +305,13 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 innerWidth = s.innerWidth,
                 outerExtrusion = s.normalExtrusionOuter,
                 innerExtrusion = s.normalExtrusionInner,
+                controlAffectsOpacity = true,
                 controlMapST = new Vector4(1f, 1f, 0f, 0f),
                 controlThreshold = 0.5f,
+                extrusionControlMapST = new Vector4(1f, 1f, 0f, 0f),
             });
             s.legacyMigrated = true;
+            s.controlOpacityToggleMigrated = true;
             return;
         }
 
@@ -279,6 +347,34 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             }
 
             s.legacyMigrated = true;
+        }
+
+        // New bool on a serialized struct defaults to false; keep previous "map affects opacity" behavior.
+        if (!s.controlOpacityToggleMigrated)
+        {
+            for (int i = 0; i < s.layers.Count; i++)
+            {
+                OutlineLayer L = s.layers[i];
+                L.controlAffectsOpacity = true;
+                s.layers[i] = L;
+            }
+
+            s.controlOpacityToggleMigrated = true;
+        }
+
+        if (!s.controlInvertMigrated)
+        {
+            if (s.outlineControlInvert)
+            {
+                for (int i = 0; i < s.layers.Count; i++)
+                {
+                    OutlineLayer L = s.layers[i];
+                    L.controlInvert = true;
+                    s.layers[i] = L;
+                }
+            }
+
+            s.controlInvertMigrated = true;
         }
     }
 
@@ -320,13 +416,20 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         static readonly int s_CharacterMaskInnerTexId = Shader.PropertyToID("_CharacterMaskInnerTex");
         static readonly int s_CharacterMaskTexelSizeId = Shader.PropertyToID("_CharacterMaskTex_TexelSize");
         static readonly int s_NormalExtrusionId = Shader.PropertyToID("_NormalExtrusion");
+        static readonly int s_DepthOffsetId = Shader.PropertyToID("_DepthOffset");
         static readonly int s_UseSmoothNormalVCId = Shader.PropertyToID("_UseSmoothNormalVC");
         static readonly int s_UseExtrudedMaskId = Shader.PropertyToID("_UseExtrudedMask");
         static readonly int s_OutlineControlEnabledId = Shader.PropertyToID("_OutlineControlEnabled");
+        static readonly int s_OutlineControlAffectsOpacityId = Shader.PropertyToID("_OutlineControlAffectsOpacity");
         static readonly int s_OutlineControlMapId = Shader.PropertyToID("_OutlineControlMap");
         static readonly int s_OutlineControlMapSTId = Shader.PropertyToID("_OutlineControlMap_ST");
         static readonly int s_OutlineControlThresholdId = Shader.PropertyToID("_OutlineControlThreshold");
         static readonly int s_OutlineControlInvertId = Shader.PropertyToID("_OutlineControlInvert");
+        static readonly int s_OutlineControlScrollAmplitudeId = Shader.PropertyToID("_OutlineControlScrollAmplitude");
+        static readonly int s_OutlineControlScrollFrequencyId = Shader.PropertyToID("_OutlineControlScrollFrequency");
+        static readonly int s_ExtrusionNoiseStrengthId = Shader.PropertyToID("_ExtrusionNoiseStrength");
+        static readonly int s_OutlineFresnelPowerId = Shader.PropertyToID("_OutlineFresnelPower");
+        static readonly int s_OutlineFresnelIntensityId = Shader.PropertyToID("_OutlineFresnelIntensity");
 
         static readonly List<ShaderTagId> s_ShaderTagIds = new List<ShaderTagId>
         {
@@ -336,12 +439,12 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         };
 
         readonly System.Func<int, Material> m_GetOutlineMaterial;
-        readonly System.Func<float, Material> m_GetMaskMaterial;
+        readonly System.Func<MaskControlParams, Material> m_GetMaskMaterial;
         readonly Settings m_Settings;
 
         public CharacterOutlinePass(
             System.Func<int, Material> getOutlineMaterial,
-            System.Func<float, Material> getMaskMaterial,
+            System.Func<MaskControlParams, Material> getMaskMaterial,
             Settings settings)
         {
             m_GetOutlineMaterial = getOutlineMaterial;
@@ -398,7 +501,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 clearBuffer = true,
                 clearColor = Color.clear,
                 filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
+                // Wrap unused: outline shader treats UV outside [0,1] as no coverage.
+                wrapMode = TextureWrapMode.Repeat,
             };
 
             TextureHandle sceneDepth = resourceData.activeDepthTexture;
@@ -422,15 +526,23 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 for (int i = 0; i < active.Count; i++)
                 {
                     OutlineLayer layer = active[i];
-                    EnsureExtrusionMask(renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks, layer.outerExtrusion);
-                    EnsureExtrusionMask(renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks, layer.innerExtrusion);
+                    EnsureExtrusionMask(
+                        renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks,
+                        MakeLayerExtrusionControlParams(layer, layer.outerExtrusion));
+                    EnsureExtrusionMask(
+                        renderGraph, frameData, maskDesc, sceneDepth, extrusionMasks,
+                        MakeLayerExtrusionControlParams(layer, layer.innerExtrusion));
                 }
             }
             else
             {
                 maskDesc.name = "_CharacterOutlineMask";
                 bodyMask = renderGraph.CreateTexture(maskDesc);
-                RecordMaskPass(renderGraph, frameData, bodyMask, sceneDepth, 0f, "CharacterOutline Draw Body Mask");
+                // Body mask: write mesh UVs only; extrusion amount 0.
+                RecordMaskPass(
+                    renderGraph, frameData, bodyMask, sceneDepth,
+                    MakeLayerExtrusionControlParams(OutlineLayer.Default, 0f),
+                    "CharacterOutline Draw Body Mask");
             }
 
             TextureDesc tempDesc = cameraColor.GetDescriptor(renderGraph);
@@ -462,8 +574,8 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
                 if (extruded)
                 {
-                    outerTex = extrusionMasks[ExtrusionKey(layer.outerExtrusion)];
-                    innerTex = extrusionMasks[ExtrusionKey(layer.innerExtrusion)];
+                    outerTex = extrusionMasks[MakeLayerExtrusionControlParams(layer, layer.outerExtrusion).CacheKey];
+                    innerTex = extrusionMasks[MakeLayerExtrusionControlParams(layer, layer.innerExtrusion).CacheKey];
                 }
                 else
                 {
@@ -479,9 +591,7 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     }
                 }
 
-                Vector4 controlST = layer.controlMapST;
-                if (controlST.x == 0f && controlST.y == 0f)
-                    controlST = new Vector4(1f, 1f, 0f, 0f);
+                GetLayerOpacityControl(layer, out Vector4 opacityST, out float opacityThr, out Vector2 opacityScrollAmp, out float opacityScrollFreq);
 
                 RecordCompositePass(
                     renderGraph,
@@ -501,10 +611,13 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     offsetPixels,
                     extruded,
                     m_Settings.outlineControlMap != null,
+                    layer.controlAffectsOpacity,
                     m_Settings.outlineControlMap != null ? m_Settings.outlineControlMap : Texture2D.whiteTexture,
-                    controlST,
-                    layer.controlThreshold,
-                    m_Settings.outlineControlInvert,
+                    opacityST,
+                    opacityThr,
+                    layer.controlInvert,
+                    opacityScrollAmp,
+                    opacityScrollFreq,
                     $"CharacterOutline Composite Layer {i}");
 
                 TextureHandle swapRT = read;
@@ -515,29 +628,60 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             renderGraph.AddBlitPass(read, cameraColor, Vector2.one, Vector2.zero, passName: "CharacterOutline Copy Back");
         }
 
+        static Vector4 SanitizeST(Vector4 st)
+        {
+            if (st.x == 0f && st.y == 0f)
+                return new Vector4(1f, 1f, 0f, 0f);
+            return st;
+        }
+
+        // Params for MASK draw: modulate vertex extrusion (independent from outline opacity).
+        MaskControlParams MakeLayerExtrusionControlParams(OutlineLayer layer, float extrusion)
+        {
+            bool hasControl = m_Settings.outlineControlMap != null;
+            return new MaskControlParams
+            {
+                extrusion = extrusion,
+                depthOffset = layer.depthOffset,
+                noiseStrength = layer.extrusionNoiseStrength,
+                controlEnabled = hasControl,
+                controlMap = hasControl ? m_Settings.outlineControlMap : Texture2D.whiteTexture,
+                controlMapST = SanitizeST(layer.extrusionControlMapST),
+            };
+        }
+
+        // Params for COMPOSITE: outline visibility / opacity (independent from extrusion).
+        void GetLayerOpacityControl(
+            OutlineLayer layer,
+            out Vector4 st,
+            out float threshold,
+            out Vector2 scrollAmp,
+            out float scrollFreq)
+        {
+            st = SanitizeST(layer.controlMapST);
+            threshold = layer.controlThreshold;
+            scrollAmp = layer.controlScrollAmplitude;
+            scrollFreq = Mathf.Max(0f, layer.controlScrollFrequency);
+        }
+
         void EnsureExtrusionMask(
             RenderGraph renderGraph,
             ContextContainer frameData,
             TextureDesc maskDesc,
             TextureHandle sceneDepth,
             Dictionary<int, TextureHandle> map,
-            float extrusion)
+            MaskControlParams control)
         {
-            int key = ExtrusionKey(extrusion);
+            int key = control.CacheKey;
             if (map.ContainsKey(key))
                 return;
 
             maskDesc.name = $"_CharacterOutlineMaskExt_{key}";
             TextureHandle rt = renderGraph.CreateTexture(maskDesc);
             RecordMaskPass(
-                renderGraph, frameData, rt, sceneDepth, extrusion,
-                $"CharacterOutline Draw Extrusion {extrusion:0.####}");
+                renderGraph, frameData, rt, sceneDepth, control,
+                $"CharacterOutline Draw Extrusion {control.extrusion:0.####}");
             map[key] = rt;
-        }
-
-        static int ExtrusionKey(float extrusion)
-        {
-            return Mathf.RoundToInt(extrusion * 10000f);
         }
 
         void RecordMaskPass(
@@ -545,13 +689,11 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             ContextContainer frameData,
             TextureHandle characterMask,
             TextureHandle sceneDepth,
-            float normalExtrusion,
+            MaskControlParams control,
             string passName)
         {
             float useSmoothVC = m_Settings.useSmoothNormalsFromVertexColor ? 1f : 0f;
-            Material maskMaterial = m_GetMaskMaterial(normalExtrusion);
-            maskMaterial.SetFloat(s_NormalExtrusionId, normalExtrusion);
-            maskMaterial.SetFloat(s_UseSmoothNormalVCId, useSmoothVC);
+            Material maskMaterial = m_GetMaskMaterial(control);
 
             using (var builder = renderGraph.AddRasterRenderPass<DrawPassData>(passName, out var passData))
             {
@@ -561,7 +703,7 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     return;
 
                 passData.maskMaterial = maskMaterial;
-                passData.normalExtrusion = normalExtrusion;
+                passData.control = control;
                 passData.useSmoothNormalVC = useSmoothVC;
 
                 builder.UseRendererList(passData.rendererListHandle);
@@ -573,10 +715,23 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
 
                 builder.SetRenderFunc(static (DrawPassData data, RasterGraphContext context) =>
                 {
-                    context.cmd.SetGlobalFloat(s_NormalExtrusionId, data.normalExtrusion);
+                    MaskControlParams c = data.control;
+                    context.cmd.SetGlobalFloat(s_NormalExtrusionId, c.extrusion);
+                    context.cmd.SetGlobalFloat(s_DepthOffsetId, c.depthOffset);
                     context.cmd.SetGlobalFloat(s_UseSmoothNormalVCId, data.useSmoothNormalVC);
-                    data.maskMaterial.SetFloat(s_NormalExtrusionId, data.normalExtrusion);
+                    context.cmd.SetGlobalFloat(s_OutlineControlEnabledId, c.controlEnabled ? 1f : 0f);
+                    context.cmd.SetGlobalFloat(s_ExtrusionNoiseStrengthId, c.noiseStrength);
+                    context.cmd.SetGlobalVector(s_OutlineControlMapSTId, c.controlMapST);
+                    Shader.SetGlobalTexture(s_OutlineControlMapId, c.controlMap);
+
+                    data.maskMaterial.SetFloat(s_NormalExtrusionId, c.extrusion);
+                    data.maskMaterial.SetFloat(s_DepthOffsetId, c.depthOffset);
                     data.maskMaterial.SetFloat(s_UseSmoothNormalVCId, data.useSmoothNormalVC);
+                    data.maskMaterial.SetFloat(s_OutlineControlEnabledId, c.controlEnabled ? 1f : 0f);
+                    data.maskMaterial.SetFloat(s_ExtrusionNoiseStrengthId, c.noiseStrength);
+                    data.maskMaterial.SetVector(s_OutlineControlMapSTId, c.controlMapST);
+                    data.maskMaterial.SetTexture(s_OutlineControlMapId, c.controlMap);
+
                     context.cmd.ClearRenderTarget(RTClearFlags.Color, Color.clear, 1f, 0);
                     context.cmd.DrawRendererList(data.rendererListHandle);
                 });
@@ -601,10 +756,13 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             Vector2 offsetPixels,
             bool extruded,
             bool controlEnabled,
+            bool controlAffectsOpacity,
             Texture controlMap,
             Vector4 controlMapST,
             float controlThreshold,
             bool controlInvert,
+            Vector2 controlScrollAmplitude,
+            float controlScrollFrequency,
             string passName)
         {
             using (var builder = renderGraph.AddRasterRenderPass<CompositePassData>(passName, out var passData))
@@ -623,10 +781,15 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                 passData.texelSize = maskTexelSize;
                 passData.useExtrudedMask = extruded ? 1f : 0f;
                 passData.outlineControlEnabled = controlEnabled ? 1f : 0f;
+                passData.outlineControlAffectsOpacity = controlAffectsOpacity ? 1f : 0f;
                 passData.outlineControlMap = controlMap;
                 passData.outlineControlMapST = controlMapST;
                 passData.outlineControlThreshold = controlThreshold;
                 passData.outlineControlInvert = controlInvert ? 1f : 0f;
+                passData.outlineControlScrollAmplitude = controlScrollAmplitude;
+                passData.outlineControlScrollFrequency = controlScrollFrequency;
+                passData.outlineFresnelPower = Mathf.Max(0.01f, m_Settings.outlineFresnelPower);
+                passData.outlineFresnelIntensity = m_Settings.outlineFresnelIntensity;
 
                 builder.UseTexture(sourceColor, AccessFlags.Read);
                 if (!extruded && bodyMask.IsValid())
@@ -658,9 +821,14 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     context.cmd.SetGlobalVector(s_CharacterMaskTexelSizeId, data.texelSize);
                     context.cmd.SetGlobalFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
                     context.cmd.SetGlobalFloat(s_OutlineControlEnabledId, data.outlineControlEnabled);
+                    context.cmd.SetGlobalFloat(s_OutlineControlAffectsOpacityId, data.outlineControlAffectsOpacity);
                     context.cmd.SetGlobalFloat(s_OutlineControlThresholdId, data.outlineControlThreshold);
                     context.cmd.SetGlobalFloat(s_OutlineControlInvertId, data.outlineControlInvert);
                     context.cmd.SetGlobalVector(s_OutlineControlMapSTId, data.outlineControlMapST);
+                    context.cmd.SetGlobalVector(s_OutlineControlScrollAmplitudeId, data.outlineControlScrollAmplitude);
+                    context.cmd.SetGlobalFloat(s_OutlineControlScrollFrequencyId, data.outlineControlScrollFrequency);
+                    context.cmd.SetGlobalFloat(s_OutlineFresnelPowerId, data.outlineFresnelPower);
+                    context.cmd.SetGlobalFloat(s_OutlineFresnelIntensityId, data.outlineFresnelIntensity);
                     Shader.SetGlobalTexture(s_OutlineControlMapId, data.outlineControlMap);
 
                     data.material.SetColor(s_OutlineColorId, data.outlineColor);
@@ -672,9 +840,14 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
                     data.material.SetVector(s_CharacterMaskTexelSizeId, data.texelSize);
                     data.material.SetFloat(s_UseExtrudedMaskId, data.useExtrudedMask);
                     data.material.SetFloat(s_OutlineControlEnabledId, data.outlineControlEnabled);
+                    data.material.SetFloat(s_OutlineControlAffectsOpacityId, data.outlineControlAffectsOpacity);
                     data.material.SetFloat(s_OutlineControlThresholdId, data.outlineControlThreshold);
                     data.material.SetFloat(s_OutlineControlInvertId, data.outlineControlInvert);
                     data.material.SetVector(s_OutlineControlMapSTId, data.outlineControlMapST);
+                    data.material.SetVector(s_OutlineControlScrollAmplitudeId, data.outlineControlScrollAmplitude);
+                    data.material.SetFloat(s_OutlineControlScrollFrequencyId, data.outlineControlScrollFrequency);
+                    data.material.SetFloat(s_OutlineFresnelPowerId, data.outlineFresnelPower);
+                    data.material.SetFloat(s_OutlineFresnelIntensityId, data.outlineFresnelIntensity);
                     data.material.SetTexture(s_OutlineControlMapId, data.outlineControlMap);
 
                     if (data.useExtrudedMask > 0.5f)
@@ -765,7 +938,7 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
         {
             public RendererListHandle rendererListHandle;
             public Material maskMaterial;
-            public float normalExtrusion;
+            public MaskControlParams control;
             public float useSmoothNormalVC;
         }
 
@@ -785,10 +958,15 @@ public class CharacterOutlineFeature : ScriptableRendererFeature
             public Vector4 texelSize;
             public float useExtrudedMask;
             public float outlineControlEnabled;
+            public float outlineControlAffectsOpacity;
             public Texture outlineControlMap;
             public Vector4 outlineControlMapST;
             public float outlineControlThreshold;
             public float outlineControlInvert;
+            public Vector2 outlineControlScrollAmplitude;
+            public float outlineControlScrollFrequency;
+            public float outlineFresnelPower;
+            public float outlineFresnelIntensity;
         }
     }
 }
