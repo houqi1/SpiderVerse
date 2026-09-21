@@ -1,0 +1,206 @@
+#pragma kernel TransformVertices
+#pragma kernel Reset
+#pragma kernel Refit
+#pragma kernel FeatureEdges
+#pragma kernel Intersections
+#pragma kernel ReuseIntersections
+#pragma kernel Arguments
+#pragma kernel Visibility
+#pragma kernel Endpoints
+#pragma kernel Connect
+#pragma kernel Strokes
+#pragma target 5.0
+
+struct Face { int4 vertices; int4 info; };
+struct Edge { int4 vertices; int4 faces; };
+struct Node { float4 lo,hi,screenLo,screenHi; };
+struct Line { float3 a; uint key; float3 b; uint obj; uint4 ka,kb; int2 faces; uint type,edge; };
+struct Segment { float4 a,b,previous,next,style; };
+ByteAddressBuffer _InputVertices;
+RWStructuredBuffer<float3> _Vertices;
+StructuredBuffer<Face> _Faces;
+StructuredBuffer<Edge> _Edges;
+StructuredBuffer<int> _EdgeFaces;
+StructuredBuffer<float4> _Objects;
+StructuredBuffer<int4> _Materials;
+StructuredBuffer<int4> _NodeTopology;
+RWStructuredBuffer<Node> _Nodes;
+RWStructuredBuffer<Line> _Candidates;
+RWStructuredBuffer<Line> _IntersectionCache;
+RWStructuredBuffer<Line> _Spans;
+RWStructuredBuffer<int> _Heads,_EndNext,_Links;
+RWStructuredBuffer<Segment> _Segments;
+RWStructuredBuffer<uint> _Counters;
+RWBuffer<uint> _DispatchArgs,_DrawArgs;
+int _VertexOffset,_VertexCount,_Stride,_PositionOffset;
+int _FaceCount,_EdgeCount,_LevelStart,_LevelCount,_Root,_Capacity,_SegmentCapacity,_HashSize,_Occlusion;
+int _RebuildIntersections;
+float4x4 _LocalToWorld,_ViewProjection;
+float4 _Camera,_ToCamera,_Screen,_Options,_Connections,_Style;
+float _Crease;
+static const float EPS=1e-7;
+uint Mix(uint x){x=(x^(x>>16))*0x7feb352d;x=(x^(x>>15))*0x846ca68b;return x^(x>>16);}
+void Overflow(uint bit){InterlockedOr(_Counters[3],bit);}
+float4 Project(float3 p){return mul(_ViewProjection,float4(p,1));}
+float Plane(float4 p,int k){return k==0?p.w+p.x:k==1?p.w-p.x:k==2?p.w+p.y:k==3?p.w-p.y:k==4?p.w+p.z:p.w-p.z;}
+bool Positive(float a,float b,inout float lo,inout float hi){if(a<0&&b<0)return false;if((a<0)!=(b<0)){float t=a/(a-b);if(a<0)lo=max(lo,t);else hi=min(hi,t);}return hi-lo>EPS;}
+bool Clip(float4 a,float4 b,out float lo,out float hi){lo=0;hi=1;[unroll]for(int k=0;k<6;k++)if(!Positive(Plane(a,k),Plane(b,k),lo,hi))return false;return true;}
+float Facing(Face f,out float3 n){float3 a=_Vertices[f.vertices.x],b=_Vertices[f.vertices.y],c=_Vertices[f.vertices.z];n=normalize(cross(b-a,c-a))*_Objects[f.vertices.w].y;return dot(n,_Camera.w>0?_Camera.xyz-a:_ToCamera.xyz);}
+bool Culled(Face f,float facing){int c=_Materials[f.info.x].x;return c==2&&facing<0||c==1&&facing>0;}
+bool Overlap(float3 a,float3 b,float3 c,float3 d){return all(a<=d)&&all(c<=b);}
+uint4 VertexKey(uint vertex,uint obj){return uint4(vertex,obj,0,0);}
+void AddCandidate(Line l){uint i;InterlockedAdd(_Counters[0],1,i);if(i<(uint)_Capacity)_Candidates[i]=l;else Overflow(1);}
+
+[numthreads(64,1,1)] void TransformVertices(uint id:SV_DispatchThreadID)
+{if(id>=(uint)_VertexCount)return;float3 p=asfloat(_InputVertices.Load3(id*_Stride+_PositionOffset));_Vertices[_VertexOffset+id]=mul(_LocalToWorld,float4(p,1)).xyz;}
+[numthreads(64,1,1)] void Reset(uint id:SV_DispatchThreadID)
+{if(id<(uint)_HashSize)_Heads[id]=-1;if(id<5||id>=6&&id<8||id==5&&_RebuildIntersections!=0)_Counters[id]=0;}
+[numthreads(64,1,1)] void Refit(uint id:SV_DispatchThreadID)
+{
+    if(id>=(uint)_LevelCount)return;uint index=_LevelStart+id;int4 t=_NodeTopology[index];Node n;
+    if(t.z>=0){
+        Face f=_Faces[t.z];float3 a=_Vertices[f.vertices.x],b=_Vertices[f.vertices.y],c=_Vertices[f.vertices.z];
+        n.lo=float4(min(a,min(b,c))-1e-6,0);n.hi=float4(max(a,max(b,c))+1e-6,0);
+        float4 pa=Project(a),pb=Project(b),pc=Project(c);
+        // A triangle's perspective extrema lie at its vertices when all w are positive.
+        // Parents union child bounds instead of projecting eight world-AABB corners again.
+        if(min(pa.w,min(pb.w,pc.w))<=1e-6){n.screenLo=float4(-1e30,-1e30,-1e30,0);n.screenHi=float4(1e30,1e30,1e30,0);}
+        else {float3 x=pa.xyz/pa.w,y=pb.xyz/pb.w,z=pc.xyz/pc.w;n.screenLo=float4(min(x,min(y,z))-1e-6,0);n.screenHi=float4(max(x,max(y,z))+1e-6,0);}
+    }else {Node a=_Nodes[t.x],b=_Nodes[t.y];n.lo=min(a.lo,b.lo);n.hi=max(a.hi,b.hi);n.screenLo=min(a.screenLo,b.screenLo);n.screenHi=max(a.screenHi,b.screenHi);}
+    _Nodes[index]=n;
+}
+[numthreads(64,1,1)] void FeatureEdges(uint id:SV_DispatchThreadID)
+{
+    if(id>=(uint)_EdgeCount)return;Edge e=_Edges[id];if(_Objects[e.vertices.z].x==0)return;
+    Face first=_Faces[_EdgeFaces[e.faces.x]];float3 n0;Facing(first,n0);bool front=false,back=false,crease=false,mat=false,culled=true;
+    for(int i=0;i<e.faces.y;i++){Face f=_Faces[_EdgeFaces[e.faces.x+i]];float3 n;float facing=Facing(f,n);front=front||facing>0;back=back||facing<=0;crease=crease||dot(n,n0)<_Crease;mat=mat||f.info.x!=first.info.x;culled=culled&&Culled(f,facing);}
+    uint type=e.faces.y==1?(_Options.x>0?1:_Options.w>0?8:0):(_Options.x>0&&front&&back?1:_Options.y>0&&crease?2:_Options.z>0&&mat?4:0);
+    if(type==0||_Occlusion!=0&&culled)return;
+    Line l=(Line)0;l.a=_Vertices[e.vertices.x];l.b=_Vertices[e.vertices.y];l.obj=e.vertices.z;l.key=id;l.type=type;l.edge=id;l.faces=int2(-1,-1);l.ka=VertexKey(e.vertices.x,l.obj);l.kb=VertexKey(e.vertices.y,l.obj);AddCandidate(l);
+}
+bool PlaneCut(float3 a,float3 b,float3 c,float3 origin,float3 normal,out float3 p,out float3 q)
+{
+    float3 v[3]={a,b,c};p=q=0;int count=0;
+    [unroll]for(int i=0;i<3;i++){float3 x=v[i],y=v[(i+1)%3];float dx=dot(normal,x-origin),dy=dot(normal,y-origin);if(abs(dx)<1e-6){if(count==0)p=x;else q=x;count++;}if(dx*dy<0){float3 z=lerp(x,y,dx/(dx-dy));if(count==0)p=z;else q=z;count++;}}
+    return count>=2;
+}
+bool IntersectFaces(Face a,Face b,out float3 p,out float3 q)
+{
+    float3 a0=_Vertices[a.vertices.x],a1=_Vertices[a.vertices.y],a2=_Vertices[a.vertices.z];float3 b0=_Vertices[b.vertices.x],b1=_Vertices[b.vertices.y],b2=_Vertices[b.vertices.z];
+    float3 an=normalize(cross(a1-a0,a2-a0)),bn=normalize(cross(b1-b0,b2-b0)),axis=cross(an,bn);p=q=0;if(dot(axis,axis)<1e-10)return false;axis=normalize(axis);
+    float3 ca,cb,da,db;if(!PlaneCut(a0,a1,a2,b0,bn,ca,cb)||!PlaneCut(b0,b1,b2,a0,an,da,db))return false;
+    float aa=dot(cb-ca,axis),ba=dot(da-ca,axis),bb=dot(db-ca,axis);float lo=max(min(0,aa),min(ba,bb)),hi=min(max(0,aa),max(ba,bb));if(hi-lo<1e-6)return false;p=ca+axis*lo;q=ca+axis*hi;return true;
+}
+[numthreads(64,1,1)] void Intersections(uint id:SV_DispatchThreadID)
+{
+    if(id>=(uint)_FaceCount)return;Face a=_Faces[id];if(_Objects[a.vertices.w].x==0)return;
+    float3 a0=_Vertices[a.vertices.x],a1=_Vertices[a.vertices.y],a2=_Vertices[a.vertices.z],lo=min(a0,min(a1,a2))-1e-6,hi=max(a0,max(a1,a2))+1e-6;
+    int stack[32];int size=1;stack[0]=_Root;
+    while(size>0){int ni=stack[--size];Node n=_Nodes[ni];if(!Overlap(lo,hi,n.lo.xyz,n.hi.xyz))continue;int4 t=_NodeTopology[ni];if(t.z<0){if(size>29){Overflow(2);return;}stack[size++]=t.x;stack[size++]=t.y;continue;}
+        uint bi=t.z;Face b=_Faces[bi];if(bi==id||bi<id&&_Objects[b.vertices.w].x>0)continue;
+        if(a.vertices.w==b.vertices.w&&(any(a.vertices.xxx==b.vertices.xyz)||any(a.vertices.yyy==b.vertices.xyz)||any(a.vertices.zzz==b.vertices.xyz)))continue;
+        float3 p,q;if(!IntersectFaces(a,b,p,q))continue;
+        float scale=max(length(_Nodes[_Root].hi.xyz-_Nodes[_Root].lo.xyz)*1e-6,1e-7);uint pair=Mix(min(a.vertices.w,b.vertices.w))^Mix(max(a.vertices.w,b.vertices.w)+0x12345u);
+        Line l=(Line)0;l.a=p;l.b=q;l.obj=min(a.vertices.w,b.vertices.w);l.type=16;l.edge=0xffffffff;l.faces=int2(id,bi);l.key=0x80000000u|(Mix(min(id,bi))^Mix(max(id,bi)));
+        l.ka=uint4(asuint((int3)round(p/scale)),pair);l.kb=uint4(asuint((int3)round(q/scale)),pair);AddCandidate(l);InterlockedAdd(_Counters[4],1);uint cacheIndex;InterlockedAdd(_Counters[5],1,cacheIndex);if(cacheIndex<(uint)_Capacity)_IntersectionCache[cacheIndex]=l;else Overflow(1);
+    }
+}
+[numthreads(64,1,1)] void ReuseIntersections(uint id:SV_DispatchThreadID)
+{if(id>=min(_Counters[5],(uint)_Capacity))return;AddCandidate(_IntersectionCache[id]);InterlockedAdd(_Counters[4],1);}
+[numthreads(64,1,1)] void Arguments(uint id:SV_DispatchThreadID)
+{
+    if(id>0)return;uint c=min(_Counters[0],(uint)_Capacity),s=min(_Counters[1],(uint)_Capacity);
+    _DispatchArgs[0]=max(1,(c+63)/64);_DispatchArgs[1]=1;_DispatchArgs[2]=1;_DispatchArgs[3]=max(1,(s+63)/64);_DispatchArgs[4]=1;_DispatchArgs[5]=1;_DispatchArgs[6]=max(1,(s*2+63)/64);_DispatchArgs[7]=1;_DispatchArgs[8]=1;
+    _DrawArgs[0]=_Counters[3]==0?min(_Counters[2],(uint)_SegmentCapacity)*6:0;_DrawArgs[1]=1;_DrawArgs[2]=0;_DrawArgs[3]=0;
+}
+float Orient(float3 a,float3 b,float3 p){return (b.x-a.x)*(p.y-a.y)-(b.y-a.y)*(p.x-a.x);}
+bool Hidden(float3 a,float3 b,float3 p,float3 q,float3 r,out float2 interval)
+{
+    interval=0;float area=Orient(p,q,r),lo=0,hi=1;if(abs(area)<1e-12)return false;float sg=area>0?1:-1;
+    if(!Positive(sg*Orient(p,q,a),sg*Orient(p,q,b),lo,hi)||!Positive(sg*Orient(q,r,a),sg*Orient(q,r,b),lo,hi)||!Positive(sg*Orient(r,p,a),sg*Orient(r,p,b),lo,hi))return false;
+    float za=(Orient(q,r,a)*p.z+Orient(r,p,a)*q.z+Orient(p,q,a)*r.z)/area,zb=(Orient(q,r,b)*p.z+Orient(r,p,b)*q.z+Orient(p,q,b)*r.z)/area;
+    if(!Positive(a.z-za-_Style.w,b.z-zb-_Style.w,lo,hi))return false;interval=float2(lo,hi);return true;
+}
+bool OwnFace(Line l,int face){if(l.edge==0xffffffff)return any(l.faces==face);Edge e=_Edges[l.edge];for(int i=0;i<e.faces.y;i++)if(_EdgeFaces[e.faces.x+i]==face)return true;return false;}
+void UnionInterval(inout float2 list[64],inout int count,float2 v)
+{
+    int a=0;while(a<count&&list[a].y<v.x-EPS)a++;int b=a;while(b<count&&list[b].x<=v.y+EPS){v.x=min(v.x,list[b].x);v.y=max(v.y,list[b].y);b++;}
+    int remove=b-a;if(count-remove>=64){Overflow(4);return;}
+    if(remove==0){for(int j=count;j>a;j--)list[j]=list[j-1];}else{for(int j=a+1;j<count-remove+1;j++)list[j]=list[j+remove-1];}
+    list[a]=v;count=count-remove+1;
+}
+void VisibleSpan(Line l,float2 range,float2 clipped,float w0,float w1,uint ci,uint part)
+{
+    float u=clipped.x+(clipped.y-clipped.x)*(range.x*w0/(w1*(1-range.x)+w0*range.x)),v=clipped.x+(clipped.y-clipped.x)*(range.y*w0/(w1*(1-range.y)+w0*range.y));
+    if(v-u<EPS)return;Line s=l;s.a=lerp(l.a,l.b,u);s.b=lerp(l.a,l.b,v);s.key=Mix(l.key)^Mix(part+1);
+    if(u>EPS)s.ka=uint4(ci,part,0xfffffffe,0xffffffff);if(v<1-EPS)s.kb=uint4(ci,part,0xfffffffd,0xffffffff);
+    uint index;InterlockedAdd(_Counters[1],1,index);if(index<(uint)_Capacity)_Spans[index]=s;else Overflow(8);
+}
+[numthreads(64,1,1)] void Visibility(uint id:SV_DispatchThreadID)
+{
+    if(id>=min(_Counters[0],(uint)_Capacity))return;Line l=_Candidates[id];float4 ca=Project(l.a),cb=Project(l.b);float lo,hi;if(!Clip(ca,cb,lo,hi))return;
+    float4 c0=lerp(ca,cb,lo),c1=lerp(ca,cb,hi);if(c0.w<=0||c1.w<=0)return;float3 a=c0.xyz/c0.w,b=c1.xyz/c1.w;if(length((a.xy-b.xy)*_Screen.xy)<.1)return;
+    float2 hidden[64];int count=0;
+    if(_Occlusion!=0){int stack[32];int size=1;stack[0]=_Root;float3 lineLo=min(a,b),lineHi=max(a,b);
+        while(size>0){int ni=stack[--size];Node n=_Nodes[ni];if(any(n.screenLo.xy>lineHi.xy)||any(n.screenHi.xy<lineLo.xy)||n.screenLo.z>=lineHi.z-_Style.w)continue;
+            // Conservative segment-vs-node rectangle, not the segment's entire screen AABB.
+            float t0=0,t1=1;if(!Positive(a.x-n.screenLo.x,b.x-n.screenLo.x,t0,t1)||!Positive(n.screenHi.x-a.x,n.screenHi.x-b.x,t0,t1)||!Positive(a.y-n.screenLo.y,b.y-n.screenLo.y,t0,t1)||!Positive(n.screenHi.y-a.y,n.screenHi.y-b.y,t0,t1))continue;
+            int4 nt=_NodeTopology[ni];if(nt.z<0){if(size>29){Overflow(2);return;}stack[size++]=nt.x;stack[size++]=nt.y;continue;}
+            Face f=_Faces[nt.z];if(_Materials[f.info.x].y==0||OwnFace(l,nt.z))continue;float3 normal;float facing=Facing(f,normal);if(Culled(f,facing))continue;
+            float4 poly[12],tmp[12];poly[0]=Project(_Vertices[f.vertices.x]);poly[1]=Project(_Vertices[f.vertices.y]);poly[2]=Project(_Vertices[f.vertices.z]);int pc=3;
+            bool inside=true,reject=false;[unroll]for(int k=0;k<6;k++){float x=Plane(poly[0],k),y=Plane(poly[1],k),z=Plane(poly[2],k);reject=reject||(x<0&&y<0&&z<0);inside=inside&&(x>=0&&y>=0&&z>=0);}if(reject)continue;
+            if(!inside)for(int k=0;k<6&&pc>0;k++){int oc=0;float4 prev=poly[pc-1];float fp=Plane(prev,k);for(int j=0;j<pc;j++){float4 p=poly[j];float v=Plane(p,k);if((v<0)!=(fp<0))tmp[oc++]=lerp(prev,p,fp/(fp-v));if(v>=0)tmp[oc++]=p;prev=p;fp=v;}pc=oc;for(int j=0;j<pc;j++)poly[j]=tmp[j];}
+            for(int j=1;j+1<pc;j++){if(poly[0].w<=0||poly[j].w<=0||poly[j+1].w<=0)continue;float2 interval;if(Hidden(a,b,poly[0].xyz/poly[0].w,poly[j].xyz/poly[j].w,poly[j+1].xyz/poly[j+1].w,interval))UnionInterval(hidden,count,interval);}
+            if(count==1&&hidden[0].x<=EPS&&hidden[0].y>=1-EPS)return;
+        }
+    }
+    float cursor=0;uint part=0;for(int i=0;i<count;i++){if(hidden[i].x>cursor+EPS)VisibleSpan(l,float2(cursor,hidden[i].x),float2(lo,hi),c0.w,c1.w,id,part++);cursor=max(cursor,hidden[i].y);}if(cursor<1-EPS)VisibleSpan(l,float2(cursor,1),float2(lo,hi),c0.w,c1.w,id,part);
+}
+uint4 Key(int endpoint){Line l=_Spans[endpoint/2];return (endpoint&1)==0?l.ka:l.kb;}
+uint Bucket(uint4 key,uint obj,uint type){return (Mix(key.x)^Mix(key.y)^Mix(key.z)^Mix(key.w)^Mix(obj)^Mix(_Connections.x>0?0:type))&(_HashSize-1);}
+[numthreads(64,1,1)] void Endpoints(uint id:SV_DispatchThreadID)
+{
+    if(id>=min(_Counters[1],(uint)_Capacity))return;Line l=_Spans[id];[unroll]for(int side=0;side<2;side++){int e=id*2+side,old;uint bucket=Bucket(side==0?l.ka:l.kb,l.obj,l.type);InterlockedExchange(_Heads[bucket],e,old);_EndNext[e]=old;_Links[e]=-1;}
+}
+float2 Direction(int endpoint){Line l=_Spans[endpoint/2];float4 a=Project((endpoint&1)==0?l.a:l.b),b=Project((endpoint&1)==0?l.b:l.a);float2 d=(b.xy/b.w-a.xy/a.w)*_Screen.xy;return dot(d,d)>1e-12?normalize(d):0;}
+int Partner(int endpoint)
+{
+    Line l=_Spans[endpoint/2];uint4 key=Key(endpoint);int i=_Heads[Bucket(key,l.obj,l.type)],best=-1,count=0;float score=_Connections.z-1e-6;float2 direction=Direction(endpoint);uint bestKey=0xffffffff;
+    while(i>=0){Line other=_Spans[i/2];if(i/2!=endpoint/2&&other.obj==l.obj&&(_Connections.x>0||other.type==l.type)&&all(Key(i)==key)){count++;float alignment=-dot(direction,Direction(i));if(alignment>score||alignment==score&&other.key<bestKey){score=alignment;best=i;bestKey=other.key;}}i=_EndNext[i];}
+    if(count==1){i=_Heads[Bucket(key,l.obj,l.type)];while(i>=0){Line other=_Spans[i/2];if(i/2!=endpoint/2&&other.obj==l.obj&&(_Connections.x>0||other.type==l.type)&&all(Key(i)==key))return i;i=_EndNext[i];}}
+    return _Connections.y>0?best:-1;
+}
+[numthreads(64,1,1)] void Connect(uint id:SV_DispatchThreadID)
+{if(id>=min(_Counters[1],(uint)_Capacity)*2)return;int p=Partner(id);if(p<0){_Links[id]=-1;return;}_Links[id]=Partner(p)==(int)id?p:-1;}
+// Walk only the compact visible graph. Each span obtains its arc length and a stable anchor.
+void Walk(int endpoint,out float distance,out int end,out uint anchor,out bool closed)
+{
+    distance=0;end=endpoint;anchor=_Spans[endpoint/2].key;closed=false;int current=endpoint;
+    for(int step=0;step<4096;step++){int p=_Links[current];if(p<0){end=current;return;}if(p/2==endpoint/2){closed=true;end=current;return;}Line l=_Spans[p/2];distance+=length(l.b-l.a);anchor=min(anchor,l.key);current=p^1;}
+    Overflow(16);
+}
+[numthreads(64,1,1)] void Strokes(uint id:SV_DispatchThreadID)
+{
+    if(id>=min(_Counters[1],(uint)_Capacity))return;Line l=_Spans[id];float len=length(l.b-l.a);if(len<EPS)return;
+    float left,right;int le,re;uint la,ra;bool lc,rc;Walk(id*2,left,le,la,lc);Walk(id*2+1,right,re,ra,rc);
+    uint anchor=min(la,ra);bool closed=lc;float total=closed?left+len:left+len+right;float startDistance=left;bool reverse=false;
+    if(closed){ // Establish a deterministic seam/direction at anchor.a; never use append order.
+        int current=id*2,anchorSpan=id;
+        for(int step=0;step<4096;step++){if(_Spans[current/2].key==anchor){anchorSpan=current/2;break;}int p=_Links[current];if(p<0)break;current=p^1;}
+        current=anchorSpan*2;startDistance=0;
+        for(int step=0;step<4096;step++){if(current/2==(int)id){reverse=(current&1)!=0;break;}Line x=_Spans[current/2];startDistance+=length(x.b-x.a);current=_Links[current^1];if(current<0)break;}
+    }else {Line a=_Spans[le/2],b=_Spans[re/2];reverse=a.key>b.key||(a.key==b.key&&(le&1)>(re&1));if(reverse)startDistance=right;}
+    float3 a=reverse?l.b:l.a,b=reverse?l.a:l.b;
+    int startEndpoint=id*2+(reverse?1:0),endEndpoint=startEndpoint^1;
+    uint seed=Mix(anchor^Mix(l.obj));float scale=(closed?1:1-_Style.x)*(1+_Style.y*(2*((seed+.5)/4294967296.0)-1));float trim=(1-scale)*.5,totalStart=total*trim,totalEnd=total*(1-trim);
+    float lo=max(startDistance,totalStart),hi=min(startDistance+len,totalEnd);
+    bool first=closed?startDistance<EPS:_Links[startEndpoint]<0,last=closed?startDistance+len>=total-EPS:_Links[endEndpoint]<0;
+    if(first)lo=totalStart;if(last)hi=totalEnd;if(hi-lo<EPS)return;
+    float3 p=lerp(a,b,(lo-startDistance)/len),q=lerp(a,b,(hi-startDistance)/len);
+    float4 pp=Project(p),pq=Project(q);float pixels=pp.w>1e-5&&pq.w>1e-5?length((pp.xy/pp.w-pq.xy/pq.w)*_Screen.xy*.5):0;
+    uint steps=_Style.z>0?(uint)clamp(max(ceil(16*(hi-lo)/(totalEnd-totalStart)),ceil(pixels/8)),1,256):1;
+    uint output;InterlockedAdd(_Counters[2],steps,output);if(output+steps>(uint)_SegmentCapacity){Overflow(32);return;}
+    float3 before=p,after=q;int neighbor=_Links[startEndpoint];if(neighbor>=0&&lo<=startDistance+EPS){Line n=_Spans[neighbor/2];before=(neighbor&1)==0?n.b:n.a;}neighbor=_Links[endEndpoint];if(neighbor>=0&&hi>=startDistance+len-EPS){Line n=_Spans[neighbor/2];after=(neighbor&1)==0?n.b:n.a;}
+    bool loop=closed&&abs(trim)<EPS;
+    for(uint i=0;i<steps;i++){float t=(float)i/steps,u=(float)(i+1)/steps;Segment s;s.a=float4(lerp(p,q,t),(lerp(lo,hi,t)-totalStart)/(totalEnd-totalStart));s.b=float4(lerp(p,q,u),(lerp(lo,hi,u)-totalStart)/(totalEnd-totalStart));s.previous=float4(i==0?before:lerp(p,q,(float)(i-1)/steps),0);s.next=float4(i+1==steps?after:lerp(p,q,(float)(i+2)/steps),0);s.style=float4(loop?1:0,(seed%10000)*.001,0,0);_Segments[output+i]=s;}
+}

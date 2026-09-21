@@ -18,7 +18,7 @@
 - Shader 字段保留 `ObjectLineArt.shader` 引用，确保构建时保留 Shader。
 - `SpiderVerse > Line Art > Create or Update Preview Scene` 可以重建接线；不会覆盖已存在预览场景里的其他对象。原 SampleScene、PC_Renderer 上的原描边配置不被替换。
 
-## 实现与性能
+## CPU Reference 实现与性能
 
 - 主线程获取静态网格/蒙皮 BakeMesh 快照；焊接拓扑按 Mesh 缓存。
 - 后台 Task 做轮廓/折痕/材质边界/三角形交线提取，48×48 屏幕空间网格遮挡区间裁剪和邻接线条合并。交线候选由 AABB BVH 筛选。
@@ -41,3 +41,35 @@
 - **Game 视图**：相机的 Rendering → Renderer 选择 LineArt_Renderer，保持 Source 组件启用。
 - **Scene 视图**：URP 17 固定使用当前 URP Asset 的默认 Renderer，不跟随 Main Camera 的 Renderer 选择。要看到线稿，在当前质量等级对应的 URP Asset（PC_RPAsset 或 Mobile_RPAsset）Renderer List 中将 LineArt_Renderer 设为 Default，并勾选 Feature 的 Show In Scene View。这也会影响选择 Use Pipeline Settings 的其他相机；需要原效果的相机请显式选择原 Renderer。
 - 编辑模式不会自动播放 Animator；可以通过 Animation 窗口预览姿态。
+
+## GPU Geometry 路径
+
+Renderer Feature 的 Execution Mode 可在 `CpuReference` 与 `GpuGeometry` 之间切换。GPU 路径需要 Geometry Compute 引用 `ObjectLineArt.compute`、GPU Stroke Shader 引用 `ObjectLineArtGpu.shader`；保留原 Stroke Shader 供 CPU 对照与回退使用。
+
+- 初始化缓存焊接邻接、原始顶点索引和空间 BVH。只有 Source 指定对象建立候选边；其他环境网格只参与遮挡/交线。蒙皮对象仅初始化时 BakeMesh 一次，用实际姿态建立 BVH。
+- 后续直接读取 Unity 的 GPU 蒙皮顶点缓冲，GPU 完成轮廓筛选、BVH 更新、交线、几何遮挡裁剪、可见边连接、整笔长度与 UV、条带生成及间接绘制。没有逐帧 CPU 顶点回读、BakeMesh 或描边 Mesh 上传，也不增加场景深度预渲染。
+- 姿态不变时复用交线；相机和输入均不变时复用整个结果。沿用 Update Rate，重画缓存结果的帧不扫描/排序整个场景。每秒只异步回读少量计数供诊断。
+- 粗细、收尖、纹理、噪声、偏移、随机长度继续适用。按连接后的可见链生成笔划，不是每条三角形边各自一笔。相机改变轮廓归属时，完整笔划身份仍可能改变；CPU/GPU 的随机种子与数值阈值并非逐像素一致。
+- 当前主要验证环境为 Unity 6000.0.48f1 / URP 17 / Windows D3D11 / RTX 4060 Laptop。要求 Compute Shader、可读网格拓扑和可访问的 GPU 蒙皮缓冲。静态批处理输入不受支持，会回退 CPU；容量/链长度溢出也会报告并回退。
+- 原地修改网格拓扑后调用 Feature 的 `InvalidateGpuGeometry()`。不覆盖 Alpha Cutout 孔洞、Terrain、粒子或 XR；沿用原几何遮挡的范围。
+
+GPU 自动检查入口为 `SpiderVerse.LineArt.Editor.LineArtGpuChecks.Run`，只允许在 `Library/LineArtValidation` 隔离工程中以 batch 模式运行，避免改动正在编辑的场景。检查闭合轮廓、局部遮挡、交线及交线缓存，并与 CPU 对照；完整场景还核对 GPU 蒙皮位置。
+
+独立程序加 `-lineArtBenchmark -lineArtMode cpu` 或 `gpu` 可运行对照测试。基准预热 8 秒、采样 12 秒，显式向 960×960 RenderTexture 渲染完整场景，避免隐藏窗口跳过渲染。结果为离屏场景吞吐，不等于编辑器窗口 FPS。`-lineArtMotion moving` 移动相机并保留角色动画；`-lineArtOutput <绝对路径前缀>` 输出统计与截图。GPU 硬件时间不可用时计数为 0，不应将其解释为零 GPU 开销。可选 `-lineArtProfile` 启用阶段 Recorder，正常基准默认不开启。
+
+### 2026-09-22 性能验收
+
+RTX 4060 Laptop，D3D11，Development Player，960×960 全场景离屏渲染，动画开启、相机移动，Update Rate 保持 30；遮挡、交线、粗细曲线和长度随机均保持开启。最终版本交替运行 CPU/GPU 各两轮，每轮预热 8 秒后采样 12 秒：
+
+| 轮次 | CPU Reference 平均 FPS | GPU Geometry 平均 FPS | 提升 | CPU / GPU P95 帧耗时 |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 723.053 | 768.832 | 6.3% | 1.900 / 1.773 ms |
+| 2 | 683.882 | 708.536 | 3.6% | 1.935 / 2.090 ms |
+
+两轮平均约提升 5%。这是有限采样的离屏吞吐提升，不保证编辑器窗口获得同等 FPS；第二轮 P95 变差，尚不能宣称尾部卡顿稳定改善。GPU 时间戳在该离屏测试中不可用，因此没有把计数为零的硬件计时当作性能证据。早期隐藏窗口未渲染产生的上万 FPS 数据全部作废。
+
+原始统计与画面：`Library/LineArtValidation/Validation/final2-{cpu,gpu}-*.txt/.png`；最终几何验证/构建日志：`Library/LineArtValidation/gpu-final2-check.log`。完整场景包含 1340 个网格、46944 个三角形；GPU 候选结构只为描边目标保留 24510 条边。通过三个几何夹具、交线缓存复用、14 个蒙皮对象位置比较（最大世界位置误差小于 0.000008）；无容量溢出或回退记录。
+
+本轮保留原 CPU 算法作为参考。整场景的候选/可见片段数量与 CPU 并非完全一致，且随机笔划身份使用新的稳定键；保留长笔划连接不等于承诺逐像素复现。GPU 不支持的输入会在 Console 说明并回退 CPU。
+
+实现依据：[NVIDIA 邻接面轮廓判断](https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-11-efficient-and-robust-shadow-volumes-using)、[Unity 6 GPU 蒙皮顶点缓冲 API](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/SkinnedMeshRenderer.GetVertexBuffer.html)。

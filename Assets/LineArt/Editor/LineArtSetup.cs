@@ -34,6 +34,8 @@ namespace SpiderVerse.LineArt.Editor
                 AssetDatabase.AddObjectToAsset(feature,renderer);renderer.rendererFeatures.Add(feature);
             }
             feature.strokeShader=AssetDatabase.LoadAssetAtPath<Shader>(Folder+"/Shaders/ObjectLineArt.shader");feature.SetActive(true);
+            feature.geometryCompute=AssetDatabase.LoadAssetAtPath<ComputeShader>(Folder+"/Shaders/ObjectLineArt.compute");
+            feature.gpuStrokeShader=AssetDatabase.LoadAssetAtPath<Shader>(Folder+"/Shaders/ObjectLineArtGpu.shader");
             // Serialized reference retains the shader in builds, and TGA is a regular Unity Texture2D asset.
             EditorUtility.SetDirty(feature);EditorUtility.SetDirty(renderer);
             int index=-1;

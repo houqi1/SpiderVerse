@@ -214,6 +214,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Active: 1
   strokeShader: {fileID: 4800000, guid: b09e31b29b31555459826dc57284dfb1, type: 3}
+  executionMode: 1
+  geometryCompute: {fileID: 7200000, guid: bf3726a52d06471f84348c8efc9a1067, type: 3}
+  gpuStrokeShader: {fileID: 4800000, guid: f3990e7601fe43da9c3fce996f78de3d, type: 3}
   settings:
     contour: 1
     crease: 1
@@ -222,7 +225,10 @@ MonoBehaviour:
     intersections: 1
     occlusion: 1
     creaseAngle: 120
-    color: {r: 0.188, g: 0.157, b: 0.125, a: 1}
+    connectDifferentEdgeTypes: 0
+    connectJunctions: 0
+    junctionMaxAngle: 20
+    color: {r: 1, g: 0.5, b: 0, a: 1}
     thickness: 2
     thicknessCurve: 1
     endTaper: 0.25
@@ -231,8 +237,12 @@ MonoBehaviour:
     lengthRandomness: 0.4
     noise: 0
     offset: {x: 0, y: 0}
+    randomOffset: {x: 0, y: 0}
     texture: {fileID: 0}
     darkOnWhiteMask: 0
+    textureRotation: 0
+    textureTiling: {x: 1, y: 1}
+    textureOffset: {x: 0, y: 0}
     textureStrength: 1
     textureRepeats: 1
     updateRate: 30
@@ -241,7 +251,8 @@ MonoBehaviour:
       m_Bits: 4294967295
     depthEpsilon: 0.00001
   showInSceneView: 1
-  lastStats: 
+  lastStats: "1215 strokes / 3777 visible spans / 7344 candidates \xB7 worker 999.7
+    ms"
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

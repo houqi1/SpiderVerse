@@ -14,11 +14,17 @@ namespace SpiderVerse.LineArt
     public sealed class ObjectLineArtFeature : ScriptableRendererFeature
     {
         public Shader strokeShader;
+        public enum ExecutionMode { CpuReference, GpuGeometry }
+        [Tooltip("GPU geometry replaces CPU skin snapshots, intersections, visibility, chaining and mesh uploads. CPU remains available for comparison and unsupported devices.")]
+        public ExecutionMode executionMode;
+        public ComputeShader geometryCompute;
+        public Shader gpuStrokeShader;
         public LineArtSettings settings = new LineArtSettings();
         public bool showInSceneView = true;
         [SerializeField, HideInInspector] string lastStats;
         public string LastStats => lastStats;
         LineArtPass pass;
+        public void InvalidateGpuGeometry()=>pass?.InvalidateGpuGeometry();
         // URP calls Create from OnValidate for every Inspector edit. Keep camera meshes
         // and in-flight work alive; actual renderer disposal still releases them.
         public override void Create() { if(pass==null)pass=new LineArtPass(this); }
@@ -38,6 +44,8 @@ namespace SpiderVerse.LineArt
             readonly Dictionary<Mesh,LineArtGeometry.Topology> topology=new Dictionary<Mesh,LineArtGeometry.Topology>();
             readonly Dictionary<SkinnedMeshRenderer,Mesh> baked=new Dictionary<SkinnedMeshRenderer,Mesh>();
             readonly HashSet<int> unreadable=new HashSet<int>();
+            readonly Dictionary<int,LineArtGpu> gpuCameras=new Dictionary<int,LineArtGpu>();
+            bool gpuWarning;
             Renderer[] sceneRenderers=Array.Empty<Renderer>();double nextScan;
             sealed class CameraState
             {
@@ -47,6 +55,18 @@ namespace SpiderVerse.LineArt
                 public string sourceSignature;public bool ready, hasSnapshot, deferredCapture, repaintQueued;public int snapshotHash;
             }
             sealed class PassData {public Mesh mesh;public Material material;}
+            sealed class GpuPassData {public LineArtGpu gpu;public Camera camera;public int width,height;public LineArtSettings settings;public TextureHandle color;public ObjectLineArtFeature owner;}
+            LineArtGpu PrepareGpu(Camera camera)
+            {
+                if(owner.executionMode!=ExecutionMode.GpuGeometry)return null;
+                if(!SystemInfo.supportsComputeShaders||!owner.geometryCompute||!owner.gpuStrokeShader){if(!gpuWarning){Debug.LogWarning("Line Art GPU resources/compute support unavailable; using CPU reference.");gpuWarning=true;}return null;}
+                int id=camera.GetInstanceID();
+                if(!gpuCameras.TryGetValue(id,out var gpu)){gpu=new LineArtGpu(owner.geometryCompute,owner.gpuStrokeShader);gpuCameras.Add(id,gpu);}
+                if(gpu.Failed)return null;
+                if(cameras.TryGetValue(id,out var old)){old.deferredCapture=false;old.repaintQueued=false;if(old.pending!=null){old.cancel.Cancel();old.cancel.Dispose();old.cancel=new CancellationTokenSource();old.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);old.pending=null;old.hasSnapshot=false;}}
+                try {return gpu.Prepare(camera,owner.settings)?gpu:null;}
+                catch(Exception e){gpu.MarkFailed();if(!gpuWarning){Debug.LogWarning("Line Art GPU setup failed; using CPU reference: "+e);gpuWarning=true;}return null;}
+            }
             public LineArtPass(ObjectLineArtFeature owner) {
                 this.owner=owner;renderPassEvent=RenderPassEvent.BeforeRenderingPostProcessing;
 #if UNITY_EDITOR
@@ -58,7 +78,7 @@ namespace SpiderVerse.LineArt
             // for finished work or a throttled snapshot, never repaint continuously while idle.
             void EditorUpdate()
             {
-                if(UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode || !owner || !owner.isActive || ObjectLineArtSource.Active.Count==0)return;
+                if(Application.isBatchMode || UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode || !owner || !owner.isActive || ObjectLineArtSource.Active.Count==0)return;
                 double now=Time.realtimeSinceStartupAsDouble;bool repaint=false;
                 foreach(var state in cameras.Values) {
                     if(!state.camera || state.repaintQueued)continue;
@@ -66,6 +86,7 @@ namespace SpiderVerse.LineArt
                         state.repaintQueued=true;repaint=true;
                     }
                 }
+                foreach(var gpu in gpuCameras.Values)if(gpu.RequestDeferredRepaint(now))repaint=true;
                 if(!repaint)return;
                 UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
                 UnityEditor.SceneView.RepaintAll();
@@ -188,6 +209,14 @@ namespace SpiderVerse.LineArt
             public override void RecordRenderGraph(RenderGraph graph,ContextContainer frameData)
             {
                 var camera=frameData.Get<UniversalCameraData>();var resources=frameData.Get<UniversalResourceData>();
+                var gpu=PrepareGpu(camera.camera);
+                if(gpu!=null){
+                    using(var builder=graph.AddUnsafePass<GpuPassData>("Object Line Art · GPU geometry",out var data)){
+                        data.gpu=gpu;data.camera=camera.camera;data.width=camera.cameraTargetDescriptor.width;data.height=camera.cameraTargetDescriptor.height;data.settings=owner.settings.Copy();data.color=resources.activeColorTexture;data.owner=owner;
+                        builder.UseTexture(data.color,AccessFlags.ReadWrite);builder.AllowPassCulling(false);
+                        builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
+                    }return;
+                }
                 var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
                 if(state==null||!state.ready)return;
                 using(var builder=graph.AddRasterRenderPass<PassData>("Object Line Art · geometric strokes",out var data)) {
@@ -200,10 +229,13 @@ namespace SpiderVerse.LineArt
             [Obsolete("Compatibility path; Unity 6 uses RecordRenderGraph.")]
             public override void Execute(ScriptableRenderContext context,ref RenderingData renderingData)
             {
-                var camera=renderingData.cameraData;var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
+                var camera=renderingData.cameraData;
+                var gpu=PrepareGpu(camera.camera);if(gpu!=null){var gc=CommandBufferPool.Get("Object Line Art GPU");gpu.Execute(gc,camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height,owner.settings);context.ExecuteCommandBuffer(gc);CommandBufferPool.Release(gc);owner.lastStats=gpu.Stats;return;}
+                var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
                 if(state==null||!state.ready)return;
                 var cmd=CommandBufferPool.Get("Object Line Art");cmd.DrawMesh(state.mesh,Matrix4x4.identity,state.material,0,0);context.ExecuteCommandBuffer(cmd);CommandBufferPool.Release(cmd);
             }
+            public void InvalidateGpuGeometry(){foreach(var gpu in gpuCameras.Values)gpu.Invalidate();gpuWarning=false;}
             public void Dispose()
             {
 #if UNITY_EDITOR
@@ -211,6 +243,7 @@ namespace SpiderVerse.LineArt
 #endif
                 foreach(var s in cameras.Values){s.cancel.Cancel();s.cancel.Dispose();if(s.pending!=null)s.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);CoreUtils.Destroy(s.mesh);CoreUtils.Destroy(s.stagingMesh);CoreUtils.Destroy(s.material);}
                 foreach(var mesh in baked.Values)CoreUtils.Destroy(mesh);baked.Clear();cameras.Clear();topology.Clear();
+                foreach(var gpu in gpuCameras.Values)gpu.Dispose();gpuCameras.Clear();
             }
         }
     }
