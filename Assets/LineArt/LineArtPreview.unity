@@ -869,8 +869,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   renderers:
-  - {fileID: 1812348940}
-  - {fileID: 1812348939}
   - {fileID: 1812348938}
   - {fileID: 1812348937}
   - {fileID: 1812348936}
@@ -879,14 +877,20 @@ MonoBehaviour:
   - {fileID: 1812348933}
   - {fileID: 1812348932}
   - {fileID: 1812348931}
+  - {fileID: 1812348940}
+  - {fileID: 1812348939}
   layers:
   - name: Layer 1
     enabled: 1
-    useSourceRenderers: 1
-    renderers: []
+    useSourceRenderers: 0
+    renderers:
+    - {fileID: 1812348938}
+    - {fileID: 1812348931}
     appearance:
+      scaleWithDistance: 1
+      sizeUnit: 0.005
       color: {r: 0.066037595, g: 0.96396554, b: 1, a: 1}
-      thickness: 7.4
+      thickness: 1.1
       thicknessCurve: 1
       endTaper: 0.684
       thicknessTransition: 1
@@ -894,8 +898,8 @@ MonoBehaviour:
       lengthRandomness: 0
       noise: 0
       noiseFrequency: 3
-      offset: {x: -7.5, y: -13.3}
-      randomOffset: {x: 14.92, y: 0}
+      offset: {x: -2.16, y: 0.64}
+      randomOffset: {x: 0.99, y: 0}
       texture: {fileID: 0}
       darkOnWhiteMask: 0
       textureRotation: 0
@@ -905,20 +909,26 @@ MonoBehaviour:
       textureRepeats: 23.8
   - name: Layer 2
     enabled: 1
-    useSourceRenderers: 1
-    renderers: []
+    useSourceRenderers: 0
+    renderers:
+    - {fileID: 1812348938}
+    - {fileID: 1812348935}
+    - {fileID: 1812348931}
+    - {fileID: 1812348937}
     appearance:
+      scaleWithDistance: 1
+      sizeUnit: 0.005
       color: {r: 0.8941622, g: 0, b: 1, a: 1}
-      thickness: 7.4
+      thickness: 1
       thicknessCurve: 1
-      endTaper: 0.684
+      endTaper: 0.459
       thicknessTransition: 1
       lengthTrim: 0
       lengthRandomness: 0
-      noise: 0
-      noiseFrequency: 3
-      offset: {x: 12.5, y: 0}
-      randomOffset: {x: 14.92, y: 0}
+      noise: 0.95
+      noiseFrequency: 0.4
+      offset: {x: 2.29, y: 0}
+      randomOffset: {x: 1.96, y: 2.22}
       texture: {fileID: 0}
       darkOnWhiteMask: 0
       textureRotation: 0
@@ -931,8 +941,10 @@ MonoBehaviour:
     useSourceRenderers: 1
     renderers: []
     appearance:
+      scaleWithDistance: 1
+      sizeUnit: 0.005
       color: {r: 0, g: 0.07239256, b: 0.19245279, a: 1}
-      thickness: 7.4
+      thickness: 1.2
       thicknessCurve: 1
       endTaper: 0.684
       thicknessTransition: 1
@@ -940,8 +952,34 @@ MonoBehaviour:
       lengthRandomness: 0
       noise: 0
       noiseFrequency: 3
-      offset: {x: 0, y: 3}
-      randomOffset: {x: 14.92, y: 0}
+      offset: {x: 0, y: 0}
+      randomOffset: {x: 0, y: 0}
+      texture: {fileID: 0}
+      darkOnWhiteMask: 0
+      textureRotation: 0
+      textureTiling: {x: 1, y: 1}
+      textureOffset: {x: 0, y: 0}
+      textureStrength: 1
+      textureRepeats: 23.8
+  - name: Layer 4
+    enabled: 1
+    useSourceRenderers: 0
+    renderers:
+    - {fileID: 1812348936}
+    appearance:
+      scaleWithDistance: 1
+      sizeUnit: 0.005
+      color: {r: 1, g: 0.8465114, b: 0, a: 1}
+      thickness: 1.5
+      thicknessCurve: 1
+      endTaper: 0.684
+      thicknessTransition: 1
+      lengthTrim: 0
+      lengthRandomness: 0
+      noise: 0
+      noiseFrequency: 3
+      offset: {x: -2.58, y: 0}
+      randomOffset: {x: 3.64, y: 0}
       texture: {fileID: 0}
       darkOnWhiteMask: 0
       textureRotation: 0
