@@ -20,7 +20,7 @@ namespace SpiderVerse.LineArt
         public sealed class Edge { public int a,b; public int[] faces; }
         public sealed class Snapshot
         {
-            public int id; public bool draw; public float orientation = 1;
+            public int id,rendererId; public bool draw; public float orientation = 1;
             public Topology topology; public Vector3[] vertices;
             public int[] cull; public bool[] opaque;
         }
@@ -46,21 +46,22 @@ namespace SpiderVerse.LineArt
         {
             public readonly List<Vector3> points = new List<Vector3>();
             public bool closed; public uint seed;
+            public int ownerA,ownerB;
         }
         struct Triangle
         {
             public Vector3 a,b,c,n; public Bounds bounds;
-            public int id,obj,ia,ib,ic,cull; public bool opaque,draw;
+            public int id,obj,selectionId,ia,ib,ic,cull; public bool opaque,draw;
             public float facing;
         }
         internal sealed class Candidate
         {
-            public Vector3 a,b; public string ka,kb,key; public int obj,type;
+            public Vector3 a,b; public string ka,kb,key; public int obj,type,ownerA,ownerB;
             public int[] faces;
         }
         sealed class Span
         {
-            public Vector3 a,b; public string ka,kb,key; public int obj,type;
+            public Vector3 a,b; public string ka,kb,key; public int obj,type,ownerA,ownerB;
         }
         struct ProjectedTriangle
         {
@@ -205,13 +206,24 @@ namespace SpiderVerse.LineArt
                         if(a.obj==b.obj && (a.ia==b.ia||a.ia==b.ib||a.ia==b.ic||a.ib==b.ia||a.ib==b.ib||a.ib==b.ic||a.ic==b.ia||a.ic==b.ib||a.ic==b.ic))continue;
                         if(Intersect(a,b,out var p,out var q)) {
                             int owner=Math.Min(a.obj,b.obj);string pair=$"{Math.Min(a.obj,b.obj)}:{Math.Max(a.obj,b.obj)}";
-                            candidates.Add(new Candidate{a=p,b=q,ka=pair+Key(p),kb=pair+Key(q),obj=owner,type=16,faces=new[]{i,id},key=$"intersection:{Math.Min(i,id)}:{Math.Max(i,id)}"});
+                            candidates.Add(new Candidate{a=p,b=q,ka=pair+Key(p),kb=pair+Key(q),obj=owner,type=16,ownerA=a.selectionId,ownerB=b.selectionId,faces=new[]{i,id},key=$"intersection:{Math.Min(i,id)}:{Math.Max(i,id)}"});
                         }
                     }
                 }
             }
         }
+        public sealed class Extraction
+        {
+            public List<Chain> chains;
+            public int candidates,spans,intersections;
+            public double milliseconds;
+        }
         public static Result Build(Snapshot[] snapshots,View view,LineArtSettings settings,CancellationToken ct,IntersectionCache cache=null,int modelHash=0)
+        {
+            var timer=Stopwatch.StartNew();var extraction=Extract(snapshots,view,settings,ct,cache,modelHash);
+            var result=MakeGeometry(extraction.chains,view,settings,ct);result.candidates=extraction.candidates;result.spans=extraction.spans;result.chains=extraction.chains.Count;result.intersections=extraction.intersections;result.milliseconds=timer.Elapsed.TotalMilliseconds;return result;
+        }
+        public static Extraction Extract(Snapshot[] snapshots,View view,LineArtSettings settings,CancellationToken ct,IntersectionCache cache=null,int modelHash=0)
         {
             var timer=Stopwatch.StartNew();var triangles=new List<Triangle>();var candidates=new List<Candidate>();
             float threshold=Mathf.Cos(Mathf.PI-settings.creaseAngle*Mathf.Deg2Rad);
@@ -220,7 +232,7 @@ namespace SpiderVerse.LineArt
                 foreach(var f in s.topology.faces) {
                     var a=s.vertices[f.a];var b=s.vertices[f.b];var c=s.vertices[f.c];
                     var normal=Vector3.Cross(b-a,c-a).normalized*s.orientation;var bounds=new Bounds(a,Vector3.zero);bounds.Encapsulate(b);bounds.Encapsulate(c);bounds.Expand(1e-6f);
-                    triangles.Add(new Triangle{a=a,b=b,c=c,n=normal,bounds=bounds,id=triangles.Count,obj=s.id,ia=f.a,ib=f.b,ic=f.c,
+                    triangles.Add(new Triangle{a=a,b=b,c=c,n=normal,bounds=bounds,id=triangles.Count,obj=s.id,selectionId=s.rendererId!=0?s.rendererId:s.id,ia=f.a,ib=f.b,ic=f.c,
                         draw=s.draw,cull=s.cull[f.material],opaque=s.opaque[f.material],facing=Vector3.Dot(normal,view.perspective?view.position-a:view.toCamera)});
                 }
                 if(!s.draw)continue;
@@ -232,7 +244,7 @@ namespace SpiderVerse.LineArt
                     int type=edge.faces.Length==1?(settings.contour?1:settings.boundaries?8:0):settings.contour&&front&&back?1:settings.crease&&crease?2:settings.materialBorders&&material?4:0;
                     if(type==0 || settings.occlusion&&allCulled)continue;
                     var faces=new int[edge.faces.Length];for(int i=0;i<faces.Length;i++)faces[i]=first+edge.faces[i];
-                    candidates.Add(new Candidate{a=s.vertices[edge.a],b=s.vertices[edge.b],ka=$"v:{edge.a}",kb=$"v:{edge.b}",obj=s.id,type=type,faces=faces,key=$"edge:{ei}"});
+                    candidates.Add(new Candidate{a=s.vertices[edge.a],b=s.vertices[edge.b],ka=$"v:{edge.a}",kb=$"v:{edge.b}",obj=s.id,type=type,ownerA=s.rendererId!=0?s.rendererId:s.id,ownerB=s.rendererId!=0?s.rendererId:s.id,faces=faces,key=$"edge:{ei}"});
                 }
             }
             int before=candidates.Count;
@@ -283,11 +295,10 @@ namespace SpiderVerse.LineArt
                 void Add(float lo,float hi) {
                     float WorldT(float x)=>t0+(t1-t0)*(x*c0.w/(c1.w*(1-x)+c0.w*x));
                     float u=WorldT(lo),v=WorldT(hi);if(v-u<Eps)return;
-                    spans.Add(new Span{a=Vector3.LerpUnclamped(s.a,s.b,u),b=Vector3.LerpUnclamped(s.a,s.b,v),obj=s.obj,type=s.type,key=s.key+$"/span:{span}",ka=u<Eps?s.ka:$"cut:{ci}:{span}:a",kb=v>1-Eps?s.kb:$"cut:{ci}:{span}:b"});span++;
+                    spans.Add(new Span{a=Vector3.LerpUnclamped(s.a,s.b,u),b=Vector3.LerpUnclamped(s.a,s.b,v),obj=s.obj,type=s.type,ownerA=s.ownerA,ownerB=s.ownerB,key=s.key+$"/span:{span}",ka=u<Eps?s.ka:$"cut:{ci}:{span}:a",kb=v>1-Eps?s.kb:$"cut:{ci}:{span}:b"});span++;
                 }
             }
-            var chains=ChainSpans(spans,view,settings);var result=MakeGeometry(chains,view,settings,ct);
-            result.candidates=candidates.Count;result.spans=spans.Count;result.chains=chains.Count;result.intersections=intersectionCount;result.milliseconds=timer.Elapsed.TotalMilliseconds;return result;
+            return new Extraction{chains=ChainSpans(spans,view,settings),candidates=candidates.Count,spans=spans.Count,intersections=intersectionCount,milliseconds=timer.Elapsed.TotalMilliseconds};
         }
         static List<Chain> ChainSpans(List<Span> spans,View view,LineArtSettings settings)
         {
@@ -335,7 +346,7 @@ namespace SpiderVerse.LineArt
             }
             void Walk(int i,bool reverse) {
                 int firstEdge=i;var start=spans[i];string first=reverse?start.kb:start.ka,from=first,anchor=null;
-                var c=new Chain();var pointKeys=new List<string>{first};c.points.Add(reverse?start.b:start.a);
+                var c=new Chain{ownerA=start.ownerA,ownerB=start.ownerB};var pointKeys=new List<string>{first};c.points.Add(reverse?start.b:start.a);
                 while(!used[i]){used[i]=true;var s=spans[i];bool forward=from==s.ka;string next=forward?s.kb:s.ka;
                     if(anchor==null||string.CompareOrdinal(s.key,anchor)<0)anchor=s.key;
                     c.points.Add(forward?s.b:s.a);pointKeys.Add(next);
@@ -378,7 +389,7 @@ namespace SpiderVerse.LineArt
                     var a=Vector3.LerpUnclamped(points[i-1],points[i],(lo-distances[i-1])/size);var b=Vector3.LerpUnclamped(points[i-1],points[i],(hi-distances[i-1])/size);
                     var pa=Project(a,view.matrix);var pb=Project(b,view.matrix);
                     float pixels=pa.w>1e-5f&&pb.w>1e-5f?new Vector2((pa.x/pa.w-pb.x/pb.w)*view.width*.5f,(pa.y/pa.w-pb.y/pb.w)*view.height*.5f).magnitude:0;
-                    int steps=settings.thicknessCurve||settings.noise>0?Mathf.Clamp(Mathf.Max(Mathf.CeilToInt(16*(hi-lo)/(end-start)),Mathf.CeilToInt(pixels/8)),1,256):1;
+                    int steps=settings.thicknessCurve||settings.noise>0?Mathf.Clamp(Mathf.Max(Mathf.CeilToInt(settings.CurveSamples*(hi-lo)/(end-start)),Mathf.CeilToInt(pixels/8)),1,256):1;
                     if(samples.Count==0){samples.Add(a);arcs.Add(0);}
                     for(int j=1;j<=steps;j++){samples.Add(Vector3.LerpUnclamped(a,b,(float)j/steps));arcs.Add((lo+(hi-lo)*j/steps-start)/(end-start));}
                 }

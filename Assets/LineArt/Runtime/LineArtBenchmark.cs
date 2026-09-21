@@ -25,6 +25,16 @@ namespace SpiderVerse.LineArt
             foreach(var f in Resources.FindObjectsOfTypeAll<ObjectLineArtFeature>())if(f.name=="Object Line Art"){feature=f;break;}
             if(!feature){Debug.LogError("Benchmark feature missing");Application.Quit(2);return;}
             feature.executionMode=mode=="gpu"?ObjectLineArtFeature.ExecutionMode.GpuGeometry:ObjectLineArtFeature.ExecutionMode.CpuReference;feature.SetActive(mode!="off");feature.showInSceneView=false;
+            if(int.TryParse(Arg("-lineArtLayers","0"),out int count)&&count>0){
+                string variant=Arg("-lineArtLayerVariant","uniform");
+                foreach(var source in ObjectLineArtSource.Active){var inherited=source.GetRenderers();source.layers=new LineArtLayer[count];for(int i=0;i<count;i++){
+                    var appearance=feature.settings.CopyAppearance();appearance.color=Color.HSVToRGB((float)i/count,1,1);appearance.offset+=new Vector2(i,0);
+                    if(variant=="shape")appearance.lengthTrim=Mathf.Clamp01(appearance.lengthTrim+i*.08f);
+                    var layer=new LineArtLayer{name="Benchmark layer "+i,appearance=appearance};
+                    if(variant=="selection"){var subset=new List<Renderer>();for(int j=0;j<inherited.Length;j++)if(j%count==i)subset.Add(inherited[j]);layer.useSourceRenderers=false;layer.renderers=subset.ToArray();}
+                    source.layers[i]=layer;
+                }}
+            }
             view=Camera.main;target=new RenderTexture(960,960,24,RenderTextureFormat.ARGB32);target.Create();view.enabled=false;view.aspect=1;position=view.transform.position;rotation=view.transform.rotation;start=last=Time.realtimeSinceStartupAsDouble;
         }
         readonly string[] markerNames={"Line Art Refit","Line Art Edges","Line Art Intersections","Line Art Visibility","Line Art Strokes"};

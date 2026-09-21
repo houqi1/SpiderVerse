@@ -18,11 +18,11 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color, _Resolution, _Offset, _TextureRotation, _RandomOffset, _TextureST;
-                float _Width, _Taper, _Transition, _Noise;
+                float _WorldSizeUnit, _Width, _Taper, _Transition, _Noise, _NoiseFrequency;
                 float _HasTexture, _TextureStrength, _TextureRepeat, _TextureMask;
             CBUFFER_END
             struct Attributes {float3 position:POSITION;float3 previous:TEXCOORD0;float3 next:TEXCOORD1;float4 stroke:TEXCOORD2;};
-            struct Varyings {float4 position:SV_POSITION;float2 uv:TEXCOORD0;};
+            struct Varyings {float4 position:SV_POSITION;float2 uv:TEXCOORD0;noperspective float screenSide:TEXCOORD1;};
             float2 Pixel(float4 p) {return p.xy/max(p.w,.000001)*_Resolution.xy*.5;}
             float2 Direction(float2 p,float2 fallback) {return dot(p,p)>.000001?normalize(p):fallback;}
             float4 ClipNeighbor(float4 p,float4 n)
@@ -54,7 +54,7 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
                 input.previous = end ? segment.a.xyz : segment.previous.xyz;
                 input.next = end ? segment.next.xyz : segment.b.xyz;
                 input.stroke = float4((corner & 1) == 0 ? -1 : 1, end ? segment.b.w : segment.a.w, segment.style.xy);
-                Varyings o; o.uv=float2(input.stroke.y,input.stroke.x*.5+.5);
+                Varyings o; o.uv=float2(input.stroke.y,input.stroke.x*.5+.5);o.screenSide=input.stroke.x;
                 float4 p=TransformWorldToHClip(input.position);
                 if(p.w<=.000001){o.position=float4(2,2,2,1);return o;}
                 float4 a=ClipNeighbor(p,TransformWorldToHClip(input.previous));
@@ -65,25 +65,29 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
                 float miter=min(1.5,1/max(.25,abs(dot(normal,n1))));
                 float curve=pow(max(0,sin(PI*saturate(input.stroke.y))),_Transition);
                 float envelope=input.stroke.z>.5?1:lerp(1,curve,_Taper);
-                float halfWidth=max(.1,_Width*.5*envelope);
-                float noise=_Noise*sin(input.stroke.y*6*PI+input.stroke.w)*sin(PI*input.stroke.y);
+                // Project a world-space appearance unit into pixels. p.w is view depth
+                // for perspective and 1 for orthographic; projection handles zoom/FOV.
+                float sizeScale=_WorldSizeUnit>0?_WorldSizeUnit*abs(UNITY_MATRIX_P._m11)*_Resolution.y*.5/p.w:1;
+                float halfWidth=max(.1,_Width*.5*envelope)*sizeScale;
+                float noise=sizeScale*_Noise*sin(input.stroke.y*(2*_NoiseFrequency)*PI+input.stroke.w)*sin(PI*input.stroke.y);
                 p.xy+=normal*(input.stroke.x*halfWidth*miter+noise)*2/_Resolution.xy*p.w;
                 // Projection sign preserves +Y down for both backbuffer and render textures.
                 // stroke.w is constant across a connected stroke; no time or vertex position
                 // enters the hash, so all its vertices translate together without frame jitter.
                 uint seed=(uint)round(input.stroke.w*1000.0);
                 float2 random=float2(RandomSigned(seed^0x68bc21ebu),RandomSigned(seed^0x02e5be93u));
-                float2 offset=_Offset.xy+random*abs(_RandomOffset.xy);
+                float2 offset=(_Offset.xy+random*abs(_RandomOffset.xy))*sizeScale;
                 p.xy+=float2(offset.x,-offset.y*_ProjectionParams.x)*2/_Resolution.xy*p.w;
                 o.position=p;return o;
             }
             half4 Frag(Varyings input):SV_Target
             {
-                float side=input.uv.y*2-1;
+                // Width and edge coverage are measured in screen pixels, independent of depth.
+                float side=input.screenSide;
                 float coverage=1-smoothstep(1-max(fwidth(side),.001),1,abs(side));
                 float mask=1;
                 if(_HasTexture>.5) {
-                    float2 uv=input.uv-.5;
+                    float2 uv=float2(input.uv.x,side*.5+.5)-.5;
                     uv=float2(_TextureRotation.x*uv.x-_TextureRotation.y*uv.y,
                               _TextureRotation.y*uv.x+_TextureRotation.x*uv.y)+.5;
                     // Rotate first, then tile (including legacy U repeats), then translate.

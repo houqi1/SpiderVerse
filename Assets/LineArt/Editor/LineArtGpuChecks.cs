@@ -16,6 +16,7 @@ namespace SpiderVerse.LineArt.Editor
         public static void BuildBenchmark()
         {
             if(!Application.isBatchMode||!Application.dataPath.Replace('\\','/').Contains("/Library/LineArtValidation/"))throw new InvalidOperationException("Isolated project required");
+            LineArtSetup.Tests();
             var renderer=AssetDatabase.LoadAssetAtPath<ScriptableRendererData>("Assets/LineArt/LineArt_Renderer.asset");var f=renderer.rendererFeatures.OfType<ObjectLineArtFeature>().First();
             f.geometryCompute=AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/LineArt/Shaders/ObjectLineArt.compute");f.gpuStrokeShader=AssetDatabase.LoadAssetAtPath<Shader>("Assets/LineArt/Shaders/ObjectLineArtGpu.shader");EditorUtility.SetDirty(f);AssetDatabase.SaveAssets();
             PlayerSettings.SetScriptingBackend(UnityEditor.Build.NamedBuildTarget.Standalone,ScriptingImplementation.Mono2x);PlayerSettings.gpuSkinning=true;PlayerSettings.enableFrameTimingStats=true;
@@ -30,6 +31,7 @@ namespace SpiderVerse.LineArt.Editor
             if(!Application.isBatchMode||!Application.dataPath.Replace('\\','/').Contains("/Library/LineArtValidation/"))throw new InvalidOperationException("Run only in the isolated LineArtValidation batch project.");
             Application.logMessageReceived+=(message,trace,type)=>{if(type==LogType.Exception||type==LogType.Error||type==LogType.Assert)error=true;};
             SyntheticChecks();
+            LineArtLayerChecks.RunFixtures();
             EditorSceneManager.OpenScene("Assets/LineArt/LineArtPreview.unity");
             Debug.Log("GPU_CHECK_SCENE_LOADED");
             var renderer=AssetDatabase.LoadAssetAtPath<ScriptableRendererData>("Assets/LineArt/LineArt_Renderer.asset");feature=renderer.rendererFeatures.OfType<ObjectLineArtFeature>().First();

@@ -8,6 +8,8 @@
 #pragma kernel Visibility
 #pragma kernel Endpoints
 #pragma kernel Connect
+#pragma kernel AnalyzeChains
+#pragma kernel ResetStrokes
 #pragma kernel Strokes
 #pragma target 5.0
 
@@ -15,6 +17,9 @@ struct Face { int4 vertices; int4 info; };
 struct Edge { int4 vertices; int4 faces; };
 struct Node { float4 lo,hi,screenLo,screenHi; };
 struct Line { float3 a; uint key; float3 b; uint obj; uint4 ka,kb; int2 faces; uint type,edge; };
+struct ChainInfo {float4 distances;uint4 flags;};
+RWStructuredBuffer<ChainInfo> _ChainInfo;
+StructuredBuffer<uint> _StrokeObjects;
 struct Segment { float4 a,b,previous,next,style; };
 ByteAddressBuffer _InputVertices;
 RWStructuredBuffer<float3> _Vertices;
@@ -37,7 +42,7 @@ int _FaceCount,_EdgeCount,_LevelStart,_LevelCount,_Root,_Capacity,_SegmentCapaci
 int _RebuildIntersections;
 float4x4 _LocalToWorld,_ViewProjection;
 float4 _Camera,_ToCamera,_Screen,_Options,_Connections,_Style;
-float _Crease;
+float _Crease,_CurveSamples;
 static const float EPS=1e-7;
 uint Mix(uint x){x=(x^(x>>16))*0x7feb352d;x=(x^(x>>15))*0x846ca68b;return x^(x>>16);}
 void Overflow(uint bit){InterlockedOr(_Counters[3],bit);}
@@ -179,9 +184,9 @@ void Walk(int endpoint,out float distance,out int end,out uint anchor,out bool c
     for(int step=0;step<4096;step++){int p=_Links[current];if(p<0){end=current;return;}if(p/2==endpoint/2){closed=true;end=current;return;}Line l=_Spans[p/2];distance+=length(l.b-l.a);anchor=min(anchor,l.key);current=p^1;}
     Overflow(16);
 }
-[numthreads(64,1,1)] void Strokes(uint id:SV_DispatchThreadID)
+[numthreads(64,1,1)] void AnalyzeChains(uint id:SV_DispatchThreadID)
 {
-    if(id>=min(_Counters[1],(uint)_Capacity))return;Line l=_Spans[id];float len=length(l.b-l.a);if(len<EPS)return;
+    if(id>=min(_Counters[1],(uint)_Capacity))return;Line l=_Spans[id];float len=length(l.b-l.a);if(len<EPS){_ChainInfo[id]=(ChainInfo)0;return;}
     float left,right;int le,re;uint la,ra;bool lc,rc;Walk(id*2,left,le,la,lc);Walk(id*2+1,right,re,ra,rc);
     uint anchor=min(la,ra);bool closed=lc;float total=closed?left+len:left+len+right;float startDistance=left;bool reverse=false;
     if(closed){ // Establish a deterministic seam/direction at anchor.a; never use append order.
@@ -190,6 +195,17 @@ void Walk(int endpoint,out float distance,out int end,out uint anchor,out bool c
         current=anchorSpan*2;startDistance=0;
         for(int step=0;step<4096;step++){if(current/2==(int)id){reverse=(current&1)!=0;break;}Line x=_Spans[current/2];startDistance+=length(x.b-x.a);current=_Links[current^1];if(current<0)break;}
     }else {Line a=_Spans[le/2],b=_Spans[re/2];reverse=a.key>b.key||(a.key==b.key&&(le&1)>(re&1));if(reverse)startDistance=right;}
+    ChainInfo result;result.distances=float4(startDistance,total,len,0);result.flags=uint4(anchor,closed?1:0,reverse?1:0,0);_ChainInfo[id]=result;
+}
+[numthreads(64,1,1)] void ResetStrokes(uint id:SV_DispatchThreadID){if(id==0)_Counters[2]=0;}
+[numthreads(64,1,1)] void Strokes(uint id:SV_DispatchThreadID)
+{
+    if(id>=min(_Counters[1],(uint)_Capacity))return;Line l=_Spans[id];
+    bool selected=_StrokeObjects[l.obj]!=0;
+    if(l.type==16)selected=_StrokeObjects[_Faces[l.faces.x].vertices.w]!=0||_StrokeObjects[_Faces[l.faces.y].vertices.w]!=0;
+    if(!selected)return;
+    ChainInfo info=_ChainInfo[id];float startDistance=info.distances.x,total=info.distances.y,len=info.distances.z;
+    if(len<EPS)return;uint anchor=info.flags.x;bool closed=info.flags.y!=0,reverse=info.flags.z!=0;
     float3 a=reverse?l.b:l.a,b=reverse?l.a:l.b;
     int startEndpoint=id*2+(reverse?1:0),endEndpoint=startEndpoint^1;
     uint seed=Mix(anchor^Mix(l.obj));float scale=(closed?1:1-_Style.x)*(1+_Style.y*(2*((seed+.5)/4294967296.0)-1));float trim=(1-scale)*.5,totalStart=total*trim,totalEnd=total*(1-trim);
@@ -198,7 +214,7 @@ void Walk(int endpoint,out float distance,out int end,out uint anchor,out bool c
     if(first)lo=totalStart;if(last)hi=totalEnd;if(hi-lo<EPS)return;
     float3 p=lerp(a,b,(lo-startDistance)/len),q=lerp(a,b,(hi-startDistance)/len);
     float4 pp=Project(p),pq=Project(q);float pixels=pp.w>1e-5&&pq.w>1e-5?length((pp.xy/pp.w-pq.xy/pq.w)*_Screen.xy*.5):0;
-    uint steps=_Style.z>0?(uint)clamp(max(ceil(16*(hi-lo)/(totalEnd-totalStart)),ceil(pixels/8)),1,256):1;
+    uint steps=_Style.z>0?(uint)clamp(max(ceil(_CurveSamples*(hi-lo)/(totalEnd-totalStart)),ceil(pixels/8)),1,256):1;
     uint output;InterlockedAdd(_Counters[2],steps,output);if(output+steps>(uint)_SegmentCapacity){Overflow(32);return;}
     float3 before=p,after=q;int neighbor=_Links[startEndpoint];if(neighbor>=0&&lo<=startDistance+EPS){Line n=_Spans[neighbor/2];before=(neighbor&1)==0?n.b:n.a;}neighbor=_Links[endEndpoint];if(neighbor>=0&&hi>=startDistance+len-EPS){Line n=_Spans[neighbor/2];after=(neighbor&1)==0?n.b:n.a;}
     bool loop=closed&&abs(trim)<EPS;

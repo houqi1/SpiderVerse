@@ -581,31 +581,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
---- !u!137 &178393187 stripped
-SkinnedMeshRenderer:
-  m_CorrespondingSourceObject: {fileID: 4924297896085719115, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
-  m_PrefabInstance: {fileID: 178393186}
-  m_PrefabAsset: {fileID: 0}
---- !u!137 &178393188 stripped
-SkinnedMeshRenderer:
-  m_CorrespondingSourceObject: {fileID: -2413418364312979704, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
-  m_PrefabInstance: {fileID: 178393186}
-  m_PrefabAsset: {fileID: 0}
---- !u!137 &178393189 stripped
-SkinnedMeshRenderer:
-  m_CorrespondingSourceObject: {fileID: -7153118723385327283, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
-  m_PrefabInstance: {fileID: 178393186}
-  m_PrefabAsset: {fileID: 0}
---- !u!137 &178393190 stripped
-SkinnedMeshRenderer:
-  m_CorrespondingSourceObject: {fileID: -2189659693163631150, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
-  m_PrefabInstance: {fileID: 178393186}
-  m_PrefabAsset: {fileID: 0}
---- !u!137 &178393191 stripped
-SkinnedMeshRenderer:
-  m_CorrespondingSourceObject: {fileID: 315054008294363397, guid: 8aa8d087a154bfa4386101c746f0be26, type: 3}
-  m_PrefabInstance: {fileID: 178393186}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -904,11 +879,76 @@ MonoBehaviour:
   - {fileID: 1812348933}
   - {fileID: 1812348932}
   - {fileID: 1812348931}
-  - {fileID: 178393191}
-  - {fileID: 178393190}
-  - {fileID: 178393189}
-  - {fileID: 178393188}
-  - {fileID: 178393187}
+  layers:
+  - name: Layer 1
+    enabled: 1
+    useSourceRenderers: 1
+    renderers: []
+    appearance:
+      color: {r: 0.066037595, g: 0.96396554, b: 1, a: 1}
+      thickness: 7.4
+      thicknessCurve: 1
+      endTaper: 0.684
+      thicknessTransition: 1
+      lengthTrim: 0
+      lengthRandomness: 0
+      noise: 0
+      noiseFrequency: 3
+      offset: {x: -7.5, y: -13.3}
+      randomOffset: {x: 14.92, y: 0}
+      texture: {fileID: 0}
+      darkOnWhiteMask: 0
+      textureRotation: 0
+      textureTiling: {x: 1, y: 1}
+      textureOffset: {x: 0, y: 0}
+      textureStrength: 1
+      textureRepeats: 23.8
+  - name: Layer 2
+    enabled: 1
+    useSourceRenderers: 1
+    renderers: []
+    appearance:
+      color: {r: 0.8941622, g: 0, b: 1, a: 1}
+      thickness: 7.4
+      thicknessCurve: 1
+      endTaper: 0.684
+      thicknessTransition: 1
+      lengthTrim: 0
+      lengthRandomness: 0
+      noise: 0
+      noiseFrequency: 3
+      offset: {x: 12.5, y: 0}
+      randomOffset: {x: 14.92, y: 0}
+      texture: {fileID: 0}
+      darkOnWhiteMask: 0
+      textureRotation: 0
+      textureTiling: {x: 1, y: 1}
+      textureOffset: {x: 0, y: 0}
+      textureStrength: 1
+      textureRepeats: 23.8
+  - name: Layer 3
+    enabled: 1
+    useSourceRenderers: 1
+    renderers: []
+    appearance:
+      color: {r: 0, g: 0.07239256, b: 0.19245279, a: 1}
+      thickness: 7.4
+      thicknessCurve: 1
+      endTaper: 0.684
+      thicknessTransition: 1
+      lengthTrim: 0
+      lengthRandomness: 0
+      noise: 0
+      noiseFrequency: 3
+      offset: {x: 0, y: 3}
+      randomOffset: {x: 14.92, y: 0}
+      texture: {fileID: 0}
+      darkOnWhiteMask: 0
+      textureRotation: 0
+      textureTiling: {x: 1, y: 1}
+      textureOffset: {x: 0, y: 0}
+      textureStrength: 1
+      textureRepeats: 23.8
 --- !u!4 &419351073
 Transform:
   m_ObjectHideFlags: 0

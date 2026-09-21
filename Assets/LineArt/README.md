@@ -8,7 +8,7 @@
 2. 菜单 `SpiderVerse > Line Art > Select Stroke Settings` 选择描边设置；也可以在 `LineArt_Renderer.asset` 的 `Object Line Art` Renderer Feature 上调整。
 3. 在 Texture 字段拖入纹理资源，支持 Unity 已导入的 TGA、PNG 等 Texture2D。带透明度的纹理保留 Alpha；白底黑色笔刷勾选 Dark On White Mask。可调 Texture Strength 和 Texture Repeats。
 4. Length Randomness 为双向随机：0.4 对应裁剪后长度的 60%–140%。以合并后的完整可见线条为单位，两端对称缩短或按端点切线增长。Closed loop 在固定接缝处处理。随机值不随帧刷新。
-5. Thickness 为渲染目标像素宽度。End Taper 控制端点收细程度，Thickness Transition 控制过渡曲线。Offset 的正 X 向右、正 Y 向下。宽度、过渡、纹理和偏移直接更新材质，不重建线条。
+5. Thickness 默认按世界尺寸投影，随角色远近一起缩放。End Taper 控制端点收细程度，Thickness Transition 控制过渡曲线。Offset 的正 X 向右、正 Y 向下。宽度、过渡、纹理和偏移直接更新材质，不重建线条。
 
 ## 在其他对象/场景使用
 
@@ -17,6 +17,24 @@
 - 相机选择 `LineArt_Renderer`（预览安装器把它追加到 PC/Mobile URP Asset 的 Renderer 列表，默认 Renderer 不变）。也可以手工把 `ObjectLineArtFeature` 加入自己的 Renderer。
 - Shader 字段保留 `ObjectLineArt.shader` 引用，确保构建时保留 Shader。
 - `SpiderVerse > Line Art > Create or Update Preview Scene` 可以重建接线；不会覆盖已存在预览场景里的其他对象。原 SampleScene、PC_Renderer 上的原描边配置不被替换。
+
+## 多层描边与 Noise Frequency
+
+在 `Object Line Art Source > Stroke Layers` 点击 **Add Layer**。每层拥有独立的 Appearance，可复制、开关和上下排序；后面的层覆盖前面的层。取消 **Use Source Renderers** 后，可在 **Layer Renderers** 单独指定该层的对象；此时列表为空表示该层不绘制。保留勾选则沿用 Source Renderers（Source 列表为空时自动获取子级 Renderer）。
+
+层列表为空时保持旧版单层行为，使用 Renderer Feature 的 Appearance。添加第一层会复制当前已加载、启用的 Feature 外观。存在层定义后，以这些层为准；全部关闭时不绘制。边类型、遮挡、连接和 Update Rate 仍在 Renderer Feature 中统一设置。
+
+`Scale With Distance` 默认开启：Thickness、Offset、Random Offset 和 Noise 振幅都按世界尺寸投影，随角色远近及相机缩放保持比例。`Size Unit` 为每个外观参数单位对应的世界长度，默认 0.005；各层独立设置。正 X 向右、正 Y 向下。关闭 Scale With Distance 才使用固定渲染像素。随机偏移的随机种子仍随笔划身份保持稳定；轮廓重新连接可能改变身份。
+
+每层 `Appearance > Noise Frequency` 可调为 0.1–32，表示整条笔划的噪声周期数，默认 3 保留原频率；Noise 控制振幅。高频噪声会自动增加条带采样，因此比低频有更多几何开销。
+
+Thickness Curve / End Taper 仍控制笔划收尖。CPU/GPU 均按每个顶点的深度和相机投影计算尺寸；不增加提取、遮挡或绘制次数。`LineArtWidthChecks.BatchRun` 验证透视深度 2 / 20 下的宽度和偏移随投影缩放、正交相机的世界尺寸，并保留显式固定像素模式的回归检查。
+
+GPU 每个相机只维护一份目标并集的拓扑、蒙皮输入、BVH、候选边、遮挡结果和连接链。Renderer 集合与长度/采样参数一致的层共享同一份条带缓冲；颜色、宽度、收尖、纹理和偏移使用独立 MaterialPropertyBlock。不同 Renderer 集合、裁剪长度或采样密度只重建相应条带，不重复整套提取与遮挡。CPU 回退也复用提取结果，并按相同条件共享 Mesh。每层仍有独立绘制成本。
+
+2026-09-22，RTX 4060 Laptop / D3D11 / 960×960 动画场景离屏测试：单层两轮平均帧耗时 1.360 / 1.440 ms；三层共享条带 1.417 ms；三层独立长度 1.592 ms；三层分别指定 Renderer 子集 1.459 ms。三层共享测试确认为 `3 layers / 1 stroke sets`。这些是整个离屏场景的有限采样，不能当作编辑器 FPS 或精确 GPU 阶段时间。
+
+新增检查覆盖实际像素颜色与层顺序、Renderer 隔离、交线双侧归属、关闭/空选择、噪声频率采样、GPU 缓冲与 CPU Mesh 复用，以及旧资源默认值。日志：`Library/LineArtValidation/layers-check4-build.log`；基准与截图：`Library/LineArtValidation/Validation/layers-*.txt/.png`。命令行基准可加 `-lineArtLayers 3 -lineArtLayerVariant uniform`，另支持 `shape` 和 `selection`。
 
 ## CPU Reference 实现与性能
 

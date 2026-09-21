@@ -45,6 +45,7 @@ namespace SpiderVerse.LineArt
             readonly Dictionary<SkinnedMeshRenderer,Mesh> baked=new Dictionary<SkinnedMeshRenderer,Mesh>();
             readonly HashSet<int> unreadable=new HashSet<int>();
             readonly Dictionary<int,LineArtGpu> gpuCameras=new Dictionary<int,LineArtGpu>();
+            readonly Dictionary<int,LineArtCpuLayers> cpuLayers=new Dictionary<int,LineArtCpuLayers>();
             bool gpuWarning;
             Renderer[] sceneRenderers=Array.Empty<Renderer>();double nextScan;
             sealed class CameraState
@@ -54,7 +55,7 @@ namespace SpiderVerse.LineArt
                 public readonly LineArtGeometry.IntersectionCache intersections = new LineArtGeometry.IntersectionCache();
                 public string sourceSignature;public bool ready, hasSnapshot, deferredCapture, repaintQueued;public int snapshotHash;
             }
-            sealed class PassData {public Mesh mesh;public Material material;}
+            sealed class PassData {public Mesh mesh;public Material material;public MaterialPropertyBlock properties;}
             sealed class GpuPassData {public LineArtGpu gpu;public Camera camera;public int width,height;public LineArtSettings settings;public TextureHandle color;public ObjectLineArtFeature owner;}
             LineArtGpu PrepareGpu(Camera camera)
             {
@@ -63,6 +64,7 @@ namespace SpiderVerse.LineArt
                 int id=camera.GetInstanceID();
                 if(!gpuCameras.TryGetValue(id,out var gpu)){gpu=new LineArtGpu(owner.geometryCompute,owner.gpuStrokeShader);gpuCameras.Add(id,gpu);}
                 if(gpu.Failed)return null;
+                if(cpuLayers.TryGetValue(id,out var layered))layered.Suspend();
                 if(cameras.TryGetValue(id,out var old)){old.deferredCapture=false;old.repaintQueued=false;if(old.pending!=null){old.cancel.Cancel();old.cancel.Dispose();old.cancel=new CancellationTokenSource();old.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);old.pending=null;old.hasSnapshot=false;}}
                 try {return gpu.Prepare(camera,owner.settings)?gpu:null;}
                 catch(Exception e){gpu.MarkFailed();if(!gpuWarning){Debug.LogWarning("Line Art GPU setup failed; using CPU reference: "+e);gpuWarning=true;}return null;}
@@ -87,6 +89,7 @@ namespace SpiderVerse.LineArt
                     }
                 }
                 foreach(var gpu in gpuCameras.Values)if(gpu.RequestDeferredRepaint(now))repaint=true;
+                foreach(var layered in cpuLayers.Values)if(layered.RequestRepaint(now))repaint=true;
                 if(!repaint)return;
                 UnityEditor.EditorApplication.QueuePlayerLoopUpdate();
                 UnityEditor.SceneView.RepaintAll();
@@ -130,7 +133,7 @@ namespace SpiderVerse.LineArt
                         cull[i]=m&&m.HasProperty("_Cull")?Mathf.RoundToInt(m.GetFloat("_Cull")):2;
                         opaque[i]=m&&m.renderQueue<=2500;
                     }
-                    result.Add(new LineArtGeometry.Snapshot{id=unchecked((int)LineArtGeometry.Hash(r.gameObject.scene.path+"/"+Path(r.transform))),draw=targets.Contains(r),topology=t,vertices=vertices,cull=cull,opaque=opaque,orientation=world.determinant<0?-1:1});
+                    result.Add(new LineArtGeometry.Snapshot{rendererId=r.GetInstanceID(),id=unchecked((int)LineArtGeometry.Hash(r.gameObject.scene.path+"/"+Path(r.transform))),draw=targets.Contains(r),topology=t,vertices=vertices,cull=cull,opaque=opaque,orientation=world.determinant<0?-1:1});
                 }
                 return result.ToArray();
             }
@@ -198,13 +201,21 @@ namespace SpiderVerse.LineArt
                 }
                 var m=state.material;if(m.shader!=owner.strokeShader)m.shader=owner.strokeShader;
                 m.SetColor("_Color",s.color);m.SetVector("_Resolution",new Vector4(width,height,0,0));
-                m.SetFloat("_Width",s.thickness);m.SetFloat("_Taper",s.thicknessCurve?s.endTaper:0);m.SetFloat("_Transition",s.thicknessTransition);
-                m.SetFloat("_Noise",s.noise);m.SetVector("_Offset",s.offset);m.SetVector("_RandomOffset",s.randomOffset);m.SetTexture("_StrokeTex",s.texture?s.texture:Texture2D.whiteTexture);
+                m.SetFloat("_Width",s.thickness);m.SetFloat("_WorldSizeUnit",s.scaleWithDistance?Mathf.Max(.00001f,s.sizeUnit):0);m.SetFloat("_Taper",s.thicknessCurve?s.endTaper:0);m.SetFloat("_Transition",s.thicknessTransition);
+                m.SetFloat("_Noise",s.noise);m.SetFloat("_NoiseFrequency",Mathf.Clamp(s.noiseFrequency,.1f,32));m.SetVector("_Offset",s.offset);m.SetVector("_RandomOffset",s.randomOffset);m.SetTexture("_StrokeTex",s.texture?s.texture:Texture2D.whiteTexture);
                 m.SetVector("_TextureST",new Vector4(s.textureTiling.x,s.textureTiling.y,s.textureOffset.x,s.textureOffset.y));
                 float textureAngle=s.textureRotation*Mathf.Deg2Rad;
                 m.SetVector("_TextureRotation",new Vector4(Mathf.Cos(textureAngle),Mathf.Sin(textureAngle),0,0));
                 m.SetFloat("_HasTexture",s.texture?1:0);m.SetFloat("_TextureStrength",s.textureStrength);m.SetFloat("_TextureRepeat",s.textureRepeats);m.SetFloat("_TextureMask",s.darkOnWhiteMask?1:0);
                 return state;
+            }
+            LineArtCpuLayers UpdateLayers(Camera camera,int width,int height)
+            {
+                if(!owner.strokeShader)owner.strokeShader=Shader.Find("Hidden/SpiderVerse/ObjectLineArt");
+                if(!owner.strokeShader)return null;
+                int id=camera.GetInstanceID();if(!cpuLayers.TryGetValue(id,out var state)){state=new LineArtCpuLayers(camera,owner.strokeShader,Capture,SnapshotHash);cpuLayers.Add(id,state);}
+                if(cameras.TryGetValue(id,out var legacy)){legacy.deferredCapture=false;if(legacy.pending!=null){legacy.cancel.Cancel();legacy.cancel.Dispose();legacy.cancel=new CancellationTokenSource();legacy.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);legacy.pending=null;legacy.hasSnapshot=false;}}
+                state.Update(owner.settings,owner.strokeShader,width,height);owner.lastStats=state.Stats;return state;
             }
             public override void RecordRenderGraph(RenderGraph graph,ContextContainer frameData)
             {
@@ -217,6 +228,14 @@ namespace SpiderVerse.LineArt
                         builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
                     }return;
                 }
+                if(ObjectLineArtSource.HasLayers){
+                    var layered=UpdateLayers(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);if(layered==null)return;
+                    foreach(var drawing in layered.drawings)using(var builder=graph.AddRasterRenderPass<PassData>("Object Line Art · layer",out var data)){
+                        data.mesh=drawing.mesh;data.material=drawing.material;data.properties=drawing.properties;builder.SetRenderAttachment(resources.activeColorTexture,0,AccessFlags.ReadWrite);
+                        builder.SetRenderFunc((PassData d,RasterGraphContext context)=>context.cmd.DrawMesh(d.mesh,Matrix4x4.identity,d.material,0,0,d.properties));
+                    }return;
+                }
+                if(cpuLayers.TryGetValue(camera.camera.GetInstanceID(),out var oldLayers))oldLayers.Suspend();
                 var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
                 if(state==null||!state.ready)return;
                 using(var builder=graph.AddRasterRenderPass<PassData>("Object Line Art · geometric strokes",out var data)) {
@@ -231,6 +250,8 @@ namespace SpiderVerse.LineArt
             {
                 var camera=renderingData.cameraData;
                 var gpu=PrepareGpu(camera.camera);if(gpu!=null){var gc=CommandBufferPool.Get("Object Line Art GPU");gpu.Execute(gc,camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height,owner.settings);context.ExecuteCommandBuffer(gc);CommandBufferPool.Release(gc);owner.lastStats=gpu.Stats;return;}
+                if(ObjectLineArtSource.HasLayers){var layered=UpdateLayers(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);if(layered==null)return;var layeredCmd=CommandBufferPool.Get("Object Line Art layers");foreach(var d in layered.drawings)layeredCmd.DrawMesh(d.mesh,Matrix4x4.identity,d.material,0,0,d.properties);context.ExecuteCommandBuffer(layeredCmd);CommandBufferPool.Release(layeredCmd);return;}
+                if(cpuLayers.TryGetValue(camera.camera.GetInstanceID(),out var oldLayers))oldLayers.Suspend();
                 var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
                 if(state==null||!state.ready)return;
                 var cmd=CommandBufferPool.Get("Object Line Art");cmd.DrawMesh(state.mesh,Matrix4x4.identity,state.material,0,0);context.ExecuteCommandBuffer(cmd);CommandBufferPool.Release(cmd);
@@ -243,6 +264,7 @@ namespace SpiderVerse.LineArt
 #endif
                 foreach(var s in cameras.Values){s.cancel.Cancel();s.cancel.Dispose();if(s.pending!=null)s.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);CoreUtils.Destroy(s.mesh);CoreUtils.Destroy(s.stagingMesh);CoreUtils.Destroy(s.material);}
                 foreach(var mesh in baked.Values)CoreUtils.Destroy(mesh);baked.Clear();cameras.Clear();topology.Clear();
+                foreach(var layered in cpuLayers.Values)layered.Dispose();cpuLayers.Clear();
                 foreach(var gpu in gpuCameras.Values)gpu.Dispose();gpuCameras.Clear();
             }
         }

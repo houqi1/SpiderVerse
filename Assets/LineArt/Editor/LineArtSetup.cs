@@ -161,10 +161,5 @@ namespace SpiderVerse.LineArt.Editor
             if(!string.IsNullOrEmpty(feature.LastStats))EditorGUILayout.LabelField(feature.LastStats,EditorStyles.wordWrappedLabel);
         }
     }
-    [CustomEditor(typeof(ObjectLineArtSource))]
-    public sealed class ObjectLineArtSourceEditor : UnityEditor.Editor
-    {
-        public override void OnInspectorGUI(){DrawDefaultInspector();EditorGUILayout.HelpBox("Stroke controls are on the Object Line Art renderer feature. Texture2D accepts imported TGA. Mesh Read/Write must be enabled for runtime geometry extraction.",MessageType.Info);if(GUILayout.Button("Select Stroke Settings"))LineArtSetup.SelectSettings();}
-    }
 }
 #endif
