@@ -37,6 +37,48 @@ MonoBehaviour:
     downsample: 2
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
+--- !u!114 &-7856576758182827068
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b3d386ba5cd94485973aee1479b272e, type: 3}
+  m_Name: RenderObjects
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  settings:
+    passTag: RenderObjects
+    Event: 300
+    filterSettings:
+      RenderQueueType: 1
+      LayerMask:
+        serializedVersion: 2
+        m_Bits: 64
+      PassNames: []
+    overrideMaterial: {fileID: 2100000, guid: 8bc25f6d0c1fca742b7a42b5865e0ed7, type: 2}
+    overrideMaterialPassIndex: 0
+    overrideShader: {fileID: 0}
+    overrideShaderPassIndex: 0
+    overrideMode: 1
+    overrideDepthState: 0
+    depthCompareFunction: 4
+    enableWrite: 1
+    stencilSettings:
+      overrideStencilState: 1
+      stencilReference: 0
+      stencilCompareFunction: 8
+      passOperation: 0
+      failOperation: 0
+      zFailOperation: 0
+    cameraSettings:
+      overrideCamera: 0
+      restoreCamera: 0
+      offset: {x: 0, y: 0, z: 0, w: 0}
+      cameraFieldOfView: 60
 --- !u!114 &-6102837461928374651
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -49,7 +91,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 942df0065c144444a5b9c2596f1ee94a, type: 3}
   m_Name: CharacterOutlineFeature
   m_EditorClassIdentifier: 
-  m_Active: 1
+  m_Active: 0
   settings:
     layerMask:
       serializedVersion: 2
@@ -69,6 +111,7 @@ MonoBehaviour:
       innerWidth: 0
       outerExtrusion: 0.013
       innerExtrusion: 0.005
+      depthOffset: 0
       controlAffectsOpacity: 0
       controlMapST: {x: 1, y: 1, z: 0, w: 0}
       controlThreshold: 0.669
@@ -85,6 +128,7 @@ MonoBehaviour:
       innerWidth: 0
       outerExtrusion: 0.01
       innerExtrusion: 0.006
+      depthOffset: 0
       controlAffectsOpacity: 0
       controlMapST: {x: 0.18, y: -0.08, z: 1.19, w: 0}
       controlThreshold: 0.309
@@ -101,6 +145,7 @@ MonoBehaviour:
       innerWidth: 0
       outerExtrusion: 0.007
       innerExtrusion: 0.003
+      depthOffset: 0
       controlAffectsOpacity: 0
       controlMapST: {x: 0.64, y: 0.03, z: 0, w: 0}
       controlThreshold: 0
@@ -117,6 +162,7 @@ MonoBehaviour:
       innerWidth: 0
       outerExtrusion: 0.01
       innerExtrusion: 0
+      depthOffset: 0
       controlAffectsOpacity: 0
       controlMapST: {x: 0.01, y: 0.17, z: 0, w: 0}
       controlThreshold: 0.132
@@ -169,7 +215,8 @@ MonoBehaviour:
   - {fileID: 7833122117494664109}
   - {fileID: -8009497109252560850}
   - {fileID: -6102837461928374651}
-  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eab
+  - {fileID: -7856576758182827068}
+  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eabc42bec7910d5f792
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}

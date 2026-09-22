@@ -56,7 +56,7 @@ namespace SpiderVerse.LineArt
                 public string sourceSignature;public bool ready, hasSnapshot, deferredCapture, repaintQueued;public int snapshotHash;
             }
             sealed class PassData {public Mesh mesh;public Material material;public MaterialPropertyBlock properties;}
-            sealed class GpuPassData {public LineArtGpu gpu;public Camera camera;public int width,height;public LineArtSettings settings;public TextureHandle color;public ObjectLineArtFeature owner;}
+            sealed class GpuPassData {public LineArtGpu gpu;public Camera camera;public int width,height;public LineArtSettings settings;public TextureHandle color,depth;public ObjectLineArtFeature owner;}
             LineArtGpu PrepareGpu(Camera camera)
             {
                 if(owner.executionMode!=ExecutionMode.GpuGeometry)return null;
@@ -200,7 +200,7 @@ namespace SpiderVerse.LineArt
                     state.nextUpdate=now+1.0/Math.Max(1,s.updateRate);
                 }
                 var m=state.material;if(m.shader!=owner.strokeShader)m.shader=owner.strokeShader;
-                m.SetColor("_Color",s.color);m.SetVector("_Resolution",new Vector4(width,height,0,0));
+                m.SetFloat("_DepthOffset",s.depthOffset);m.SetColor("_Color",s.color);m.SetVector("_Resolution",new Vector4(width,height,0,0));
                 m.SetFloat("_Width",s.thickness);m.SetFloat("_WorldSizeUnit",s.scaleWithDistance?Mathf.Max(.00001f,s.sizeUnit):0);m.SetFloat("_Taper",s.thicknessCurve?s.endTaper:0);m.SetFloat("_Transition",s.thicknessTransition);
                 m.SetFloat("_Noise",s.noise);m.SetFloat("_NoiseFrequency",Mathf.Clamp(s.noiseFrequency,.1f,32));m.SetVector("_Offset",s.offset);m.SetVector("_RandomOffset",s.randomOffset);m.SetTexture("_StrokeTex",s.texture?s.texture:Texture2D.whiteTexture);
                 m.SetVector("_TextureST",new Vector4(s.textureTiling.x,s.textureTiling.y,s.textureOffset.x,s.textureOffset.y));
@@ -223,15 +223,16 @@ namespace SpiderVerse.LineArt
                 var gpu=PrepareGpu(camera.camera);
                 if(gpu!=null){
                     using(var builder=graph.AddUnsafePass<GpuPassData>("Object Line Art · GPU geometry",out var data)){
-                        data.gpu=gpu;data.camera=camera.camera;data.width=camera.cameraTargetDescriptor.width;data.height=camera.cameraTargetDescriptor.height;data.settings=owner.settings.Copy();data.color=resources.activeColorTexture;data.owner=owner;
-                        builder.UseTexture(data.color,AccessFlags.ReadWrite);builder.AllowPassCulling(false);
-                        builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
+                        data.gpu=gpu;data.camera=camera.camera;data.width=camera.cameraTargetDescriptor.width;data.height=camera.cameraTargetDescriptor.height;data.settings=owner.settings.Copy();data.color=resources.activeColorTexture;data.depth=resources.activeDepthTexture;data.owner=owner;
+                        builder.UseTexture(data.color,AccessFlags.ReadWrite);builder.UseTexture(data.depth,AccessFlags.Read);builder.AllowPassCulling(false);
+                        builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color,d.depth);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
                     }return;
                 }
                 if(ObjectLineArtSource.HasLayers){
                     var layered=UpdateLayers(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);if(layered==null)return;
                     foreach(var drawing in layered.drawings)using(var builder=graph.AddRasterRenderPass<PassData>("Object Line Art · layer",out var data)){
                         data.mesh=drawing.mesh;data.material=drawing.material;data.properties=drawing.properties;builder.SetRenderAttachment(resources.activeColorTexture,0,AccessFlags.ReadWrite);
+                        builder.SetRenderAttachmentDepth(resources.activeDepthTexture,AccessFlags.Read);
                         builder.SetRenderFunc((PassData d,RasterGraphContext context)=>context.cmd.DrawMesh(d.mesh,Matrix4x4.identity,d.material,0,0,d.properties));
                     }return;
                 }
@@ -241,8 +242,15 @@ namespace SpiderVerse.LineArt
                 using(var builder=graph.AddRasterRenderPass<PassData>("Object Line Art · geometric strokes",out var data)) {
                     data.mesh=state.mesh;data.material=state.material;
                     builder.SetRenderAttachment(resources.activeColorTexture,0,AccessFlags.ReadWrite);
+                    builder.SetRenderAttachmentDepth(resources.activeDepthTexture,AccessFlags.Read);
                     builder.SetRenderFunc((PassData d,RasterGraphContext context)=>context.cmd.DrawMesh(d.mesh,Matrix4x4.identity,d.material,0,0));
                 }
+            }
+            [Obsolete("Compatibility path; Unity 6 uses RecordRenderGraph.")]
+            public override void OnCameraSetup(CommandBuffer cmd,ref RenderingData renderingData)
+            {
+                var renderer=renderingData.cameraData.renderer;
+                ConfigureTarget(renderer.cameraColorTargetHandle,renderer.cameraDepthTargetHandle);
             }
             // Compatibility mode is supported as well; default Unity 6 path is RenderGraph.
             [Obsolete("Compatibility path; Unity 6 uses RecordRenderGraph.")]

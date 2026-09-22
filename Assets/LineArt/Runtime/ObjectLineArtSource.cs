@@ -28,6 +28,8 @@ namespace SpiderVerse.LineArt
         public Vector2 offset;
         [Tooltip("Per-stroke random screen translation in appearance units; follows Scale With Distance. X/Y are maximum absolute offsets; each connected stroke moves as a whole. Stable while stroke identity is unchanged. Zero disables it.")]
         public Vector2 randomOffset;
+        [Tooltip("Depth offset in world units. Positive moves depth toward the camera; negative moves it away. Does not change screen position or width. Scene depth testing always applies.")]
+        public float depthOffset = .001f;
         [Header("Texture")]
         [Tooltip("Drag a Texture2D asset here, including imported .tga. No Read/Write requirement.")]
         public Texture2D texture;
@@ -45,12 +47,12 @@ namespace SpiderVerse.LineArt
         public int CurveSamples => noise > 0 ? Mathf.Max(16, Mathf.CeilToInt(Mathf.Clamp(noiseFrequency,.1f,32)*8)) : 16;
         public int StrokeHash(){unchecked{return ((lengthTrim.GetHashCode()*31+lengthRandomness.GetHashCode())*31+(Subdivide?1:0))*31+(Subdivide?CurveSamples:0);}}
         public bool SameGeometry(LineArtAppearance other)=>other!=null&&lengthTrim.Equals(other.lengthTrim)&&lengthRandomness.Equals(other.lengthRandomness)&&Subdivide==other.Subdivide&&(!Subdivide||CurveSamples==other.CurveSamples);
-        internal bool SameAppearance(LineArtAppearance other)=>SameGeometry(other)&&scaleWithDistance==other.scaleWithDistance&&sizeUnit.Equals(other.sizeUnit)&&color==other.color&&thickness.Equals(other.thickness)&&thicknessCurve==other.thicknessCurve&&endTaper.Equals(other.endTaper)&&thicknessTransition.Equals(other.thicknessTransition)&&noise.Equals(other.noise)&&noiseFrequency.Equals(other.noiseFrequency)&&offset==other.offset&&randomOffset==other.randomOffset&&texture==other.texture&&darkOnWhiteMask==other.darkOnWhiteMask&&textureRotation.Equals(other.textureRotation)&&textureTiling==other.textureTiling&&textureOffset==other.textureOffset&&textureStrength.Equals(other.textureStrength)&&textureRepeats.Equals(other.textureRepeats);
+        internal bool SameAppearance(LineArtAppearance other)=>SameGeometry(other)&&scaleWithDistance==other.scaleWithDistance&&sizeUnit.Equals(other.sizeUnit)&&color==other.color&&thickness.Equals(other.thickness)&&thicknessCurve==other.thicknessCurve&&endTaper.Equals(other.endTaper)&&thicknessTransition.Equals(other.thicknessTransition)&&noise.Equals(other.noise)&&noiseFrequency.Equals(other.noiseFrequency)&&depthOffset.Equals(other.depthOffset)&&offset==other.offset&&randomOffset==other.randomOffset&&texture==other.texture&&darkOnWhiteMask==other.darkOnWhiteMask&&textureRotation.Equals(other.textureRotation)&&textureTiling==other.textureTiling&&textureOffset==other.textureOffset&&textureStrength.Equals(other.textureStrength)&&textureRepeats.Equals(other.textureRepeats);
         public LineArtAppearance CopyAppearance(){var result=new LineArtAppearance();CopyTo(result);return result;}
         public void CopyTo(LineArtAppearance target)
         {
             target.scaleWithDistance=scaleWithDistance;target.sizeUnit=sizeUnit;target.color=color;target.thickness=thickness;target.thicknessCurve=thicknessCurve;target.endTaper=endTaper;target.thicknessTransition=thicknessTransition;
-            target.lengthTrim=lengthTrim;target.lengthRandomness=lengthRandomness;target.noise=noise;target.noiseFrequency=noiseFrequency;target.offset=offset;target.randomOffset=randomOffset;
+            target.lengthTrim=lengthTrim;target.lengthRandomness=lengthRandomness;target.noise=noise;target.noiseFrequency=noiseFrequency;target.depthOffset=depthOffset;target.offset=offset;target.randomOffset=randomOffset;
             target.texture=texture;target.darkOnWhiteMask=darkOnWhiteMask;target.textureRotation=textureRotation;target.textureTiling=textureTiling;target.textureOffset=textureOffset;target.textureStrength=textureStrength;target.textureRepeats=textureRepeats;
         }
     }

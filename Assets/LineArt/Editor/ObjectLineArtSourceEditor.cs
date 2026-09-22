@@ -32,7 +32,7 @@ namespace SpiderVerse.LineArt.Editor
             var layers=serializedObject.FindProperty("layers");
             EditorGUILayout.Space();EditorGUILayout.LabelField("Stroke Layers",EditorStyles.boldLabel);
             if(layers.arraySize==0)EditorGUILayout.HelpBox("Legacy single layer: uses the Renderer Feature appearance. Add Layer copies that appearance and keeps the current renderer selection.",MessageType.Info);
-            else EditorGUILayout.HelpBox("Drawn in list order; later layers appear on top. Appearance is independent per layer. Edge types, occlusion and connections remain shared in the Renderer Feature.",MessageType.None);
+            else EditorGUILayout.HelpBox("Scene depth occludes strokes. Depth Offset is independent per layer (world units; positive toward camera). Visible layers blend in list order. Edge types, occlusion and connections remain shared in the Renderer Feature.",MessageType.None);
             int remove=-1,duplicate=-1,move=-1,direction=0;
             for(int i=0;i<layers.arraySize;i++)
             {

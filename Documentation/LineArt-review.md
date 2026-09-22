@@ -52,3 +52,13 @@ Texture Tiling 为二维 UV 缩放，默认 (1, 1)；Texture Offset 为二维 UV
 ## 验证
 
 独立 Unity 6000.0.48f1 批处理工程检查连接与裁切逻辑：默认 T 分叉断开、开启后直线续接、跨类型开关、角度接受/拒绝、十字交叉配对、开放链不误判闭环、视锥内/外三角形。回归入口为 LineArtConnectionChecks.Run，仅允许在隔离批处理工程运行。未进行当前场景的视觉对比和帧时间基准。
+
+## 描边深度遮挡与逐层偏移
+
+CPU/GPU 描边均启用 LEqual 深度测试，并绑定相机深度附件（RenderGraph 和兼容模式）。描边扩宽、噪声和屏幕偏移后的像素也接受场景深度遮挡。描边不写入深度；多个可见图层仍按列表顺序透明混合。
+
+Object Line Art Source → Stroke Layers → 每层 Appearance → Depth Offset 可独立设置，单位为世界单位：正值靠近相机、负值远离相机，默认 0.001 用于减轻共面闪烁。它只修改投影深度，不改变屏幕位置、粗细或贴图，支持透视、正交和 reversed-Z。未使用图层的 Source 使用 Renderer Feature → Settings 中的同名参数。复制图层保留该值，实时调整仅刷新材质参数。
+
+共享 Occlusion 仍控制几何阶段的隐藏线裁切；Depth Offset 不会恢复这一阶段已删除的线段。关闭共享 Occlusion 后，最终绘制仍接受场景深度测试。不写深度的透明物体不会通过此深度测试遮挡描边。
+
+深度回归入口：LineArtDepthChecks.BatchRun（仅隔离验证工程）。检查 CPU/GPU 在透视/正交相机下被前景遮挡、正偏移移到前景前方、负偏移保持遮挡，以及图层属性复制、独立性和实时刷新。

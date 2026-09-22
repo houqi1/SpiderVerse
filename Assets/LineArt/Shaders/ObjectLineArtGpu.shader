@@ -7,7 +7,7 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
         Pass
         {
             Name "ObjectLineArt"
-            ZWrite Off ZTest Always Cull Off
+            ZWrite Off ZTest LEqual Cull Off
             Blend SrcAlpha OneMinusSrcAlpha
             HLSLPROGRAM
             #pragma vertex Vert
@@ -18,6 +18,7 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Color, _Resolution, _Offset, _TextureRotation, _RandomOffset, _TextureST;
+                float _DepthOffset;
                 float _WorldSizeUnit, _Width, _Taper, _Transition, _Noise, _NoiseFrequency;
                 float _HasTexture, _TextureStrength, _TextureRepeat, _TextureMask;
             CBUFFER_END
@@ -78,6 +79,12 @@ Shader "Hidden/SpiderVerse/ObjectLineArtGpu"
                 float2 random=float2(RandomSigned(seed^0x68bc21ebu),RandomSigned(seed^0x02e5be93u));
                 float2 offset=(_Offset.xy+random*abs(_RandomOffset.xy))*sizeScale;
                 p.xy+=float2(offset.x,-offset.y*_ProjectionParams.x)*2/_Resolution.xy*p.w;
+                // Bias only depth, keeping the expanded ribbon's screen position/width.
+                // Reprojection handles perspective, orthographic and reversed-Z cameras.
+                float3 depthPosition=TransformWorldToView(input.position);
+                depthPosition.z=min(depthPosition.z+_DepthOffset,-_ProjectionParams.y);
+                float4 depthClip=mul(UNITY_MATRIX_P,float4(depthPosition,1));
+                p.z=depthClip.z/depthClip.w*p.w;
                 o.position=p;return o;
             }
             half4 Frag(Varyings input):SV_Target
