@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule.Util;
 using UnityEngine.Rendering.Universal;
 
 namespace SpiderVerse.LineArt
@@ -22,6 +23,14 @@ namespace SpiderVerse.LineArt
     // Only snapshots cross the worker boundary. Unity scene, skinning and Mesh upload stay on the main thread.
     public sealed class ObjectLineArtFeature : ScriptableRendererFeature
     {
+        public struct CameraSample
+        {
+            public Vector3 position;
+            public Vector3 forward;
+            public bool orthographic;
+            public int generation;
+        }
+
         public Shader strokeShader;
         public enum ExecutionMode { CpuReference, GpuGeometry }
         [Tooltip("GPU geometry replaces CPU skin snapshots, intersections, visibility, chaining and mesh uploads. CPU remains available for comparison and unsupported devices.")]
@@ -33,9 +42,17 @@ namespace SpiderVerse.LineArt
         [SerializeField, HideInInspector] string lastStats;
         public string LastStats => lastStats;
         LineArtPass pass;
+        SurfaceNoisePass surfaceNoisePass;
         static readonly int LineArtCameraPositionId = Shader.PropertyToID("_LineArtCameraPosition");
         readonly Dictionary<int, CameraHold> cameraHolds = new Dictionary<int, CameraHold>();
-        sealed class CameraHold { public Vector3 position; public double nextUpdate; public int generation; }
+        sealed class CameraHold
+        {
+            public Vector3 position;
+            public Vector3 forward;
+            public bool orthographic;
+            public double nextUpdate;
+            public int generation;
+        }
         // Steps the camera on line art's updateRate and publishes it before the frame draws.
         public void SyncLineArtCamera(Camera camera)
         {
@@ -50,6 +67,8 @@ namespace SpiderVerse.LineArt
             if (hold.generation == 0 || now >= hold.nextUpdate)
             {
                 hold.position = camera.transform.position;
+                hold.forward = camera.transform.forward;
+                hold.orthographic = camera.orthographic;
                 hold.nextUpdate = now + 1.0 / Math.Max(1, settings.updateRate);
                 hold.generation++;
             }
@@ -58,19 +77,143 @@ namespace SpiderVerse.LineArt
         }
         public int LineArtCameraGeneration(Camera camera) => camera && cameraHolds.TryGetValue(camera.GetInstanceID(), out var hold) ? hold.generation : 0;
         public double LineArtCameraNextUpdate(Camera camera) => camera && cameraHolds.TryGetValue(camera.GetInstanceID(), out var hold) ? hold.nextUpdate : 0;
+
+        public bool TryGetLineArtCameraSample(Camera camera, out CameraSample sample)
+        {
+            sample = default;
+            if (!camera || !cameraHolds.TryGetValue(camera.GetInstanceID(), out var hold))
+                return false;
+
+            sample = new CameraSample
+            {
+                position = hold.position,
+                forward = hold.forward,
+                orthographic = hold.orthographic,
+                generation = hold.generation
+            };
+            return true;
+        }
+
+        // Resolve the feature for this camera and step the shared hold so line art and
+        // surface particles consume the identical per-camera sample and update rate.
+        public static bool TryGetCameraSample(Camera camera, out CameraSample sample)
+        {
+            sample = default;
+            if (!camera || UniversalRenderPipeline.asset == null)
+                return false;
+
+            UniversalRenderPipelineAsset pipeline = UniversalRenderPipeline.asset;
+            UniversalAdditionalCameraData additionalData = camera.GetComponent<UniversalAdditionalCameraData>();
+            ScriptableRenderer selectedRenderer = additionalData != null
+                ? additionalData.scriptableRenderer
+                : pipeline.scriptableRenderer;
+            if (selectedRenderer == null)
+                return false;
+
+            var rendererDataList = pipeline.rendererDataList;
+            for (int rendererIndex = 0; rendererIndex < rendererDataList.Length; rendererIndex++)
+            {
+                ScriptableRendererData rendererData = rendererDataList[rendererIndex];
+                if (rendererData == null || pipeline.GetRenderer(rendererIndex) != selectedRenderer)
+                    continue;
+
+                List<ScriptableRendererFeature> features = rendererData.rendererFeatures;
+                for (int featureIndex = 0; featureIndex < features.Count; featureIndex++)
+                {
+                    if (!(features[featureIndex] is ObjectLineArtFeature feature) || !feature.isActive)
+                        continue;
+
+                    feature.SyncLineArtCamera(camera);
+                    return feature.TryGetLineArtCameraSample(camera, out sample);
+                }
+            }
+
+            return false;
+        }
+
         public void InvalidateGpuGeometry()=>pass?.InvalidateGpuGeometry();
         // URP calls Create from OnValidate for every Inspector edit. Keep camera meshes
         // and in-flight work alive; actual renderer disposal still releases them.
-        public override void Create() { if(pass==null)pass=new LineArtPass(this); }
+        public override void Create() {
+            if(pass==null)pass=new LineArtPass(this);
+            if(surfaceNoisePass==null)surfaceNoisePass=new SurfaceNoisePass(this);
+        }
         public override void AddRenderPasses(ScriptableRenderer renderer,ref RenderingData renderingData)
         {
             var c=renderingData.cameraData;
             if(c.cameraType!=CameraType.Game && !(showInSceneView&&c.cameraType==CameraType.SceneView))return;
-            if(c.renderType==CameraRenderType.Overlay || ObjectLineArtSource.Active.Count==0)return;
+            if(c.renderType==CameraRenderType.Overlay)return;
             SyncLineArtCamera(c.camera);
+            if(surfaceNoisePass!=null && SurfaceNoiseParticleEffect.ActiveEffects.Count>0)
+                renderer.EnqueuePass(surfaceNoisePass);
+            if(ObjectLineArtSource.Active.Count==0)return;
             if(pass!=null)renderer.EnqueuePass(pass);
         }
-        protected override void Dispose(bool disposing) {pass?.Dispose();pass=null;}
+        protected override void Dispose(bool disposing) {pass?.Dispose();pass=null;surfaceNoisePass=null;}
+
+        sealed class SurfaceNoisePass : ScriptableRenderPass
+        {
+            sealed class PassData
+            {
+                public Camera camera;
+                public CameraSample cameraSample;
+                public SurfaceNoiseParticleEffect[] effects;
+                public TextureHandle opaqueColor;
+                public TextureHandle color;
+                public TextureHandle depth;
+                public TextureHandle cameraDepth;
+            }
+
+            readonly ObjectLineArtFeature owner;
+
+            public SurfaceNoisePass(ObjectLineArtFeature owner)
+            {
+                this.owner=owner;
+                renderPassEvent=RenderPassEvent.BeforeRenderingTransparents;
+                ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
+            }
+
+            public override void RecordRenderGraph(RenderGraph graph,ContextContainer frameData)
+            {
+                var cameraData=frameData.Get<UniversalCameraData>();
+                var resources=frameData.Get<UniversalResourceData>();
+                if(!resources.cameraOpaqueTexture.IsValid() || !resources.activeColorTexture.IsValid() ||
+                    !resources.cameraDepthTexture.IsValid() ||
+                    SurfaceNoiseParticleEffect.ActiveEffects.Count==0)return;
+
+                Camera camera=cameraData.camera;
+                CameraSample sample;
+                if(!owner.TryGetLineArtCameraSample(camera,out sample))
+                    sample=new CameraSample{position=camera.transform.position,forward=camera.transform.forward,orthographic=camera.orthographic};
+
+                using(var builder=graph.AddUnsafePass<PassData>("Surface Noise · color matched particles",out var data))
+                {
+                    data.camera=camera;
+                    data.cameraSample=sample;
+                    data.effects=SurfaceNoiseParticleEffect.ActiveEffects.ToArray();
+                    data.opaqueColor=resources.cameraOpaqueTexture;
+                    data.color=resources.activeColorTexture;
+                    data.depth=resources.activeDepthTexture;
+                    data.cameraDepth=resources.cameraDepthTexture;
+                    builder.UseTexture(data.opaqueColor,AccessFlags.Read);
+                    builder.UseTexture(data.color,AccessFlags.ReadWrite);
+                    builder.UseTexture(data.depth,AccessFlags.Read);
+                    builder.UseTexture(data.cameraDepth,AccessFlags.Read);
+                    builder.AllowPassCulling(false);
+                    builder.SetRenderFunc((PassData d,UnsafeGraphContext context)=>
+                    {
+                        context.cmd.SetRenderTarget(d.color,d.depth);
+                        var commandBuffer=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
+                        for(int i=0;i<d.effects.Length;i++)
+                        {
+                            var effect=d.effects[i];
+                            if(effect!=null && effect.isActiveAndEnabled)
+                                effect.DrawFromRenderPass(commandBuffer,d.camera,d.cameraSample);
+                        }
+                    });
+                }
+            }
+        }
 
         sealed class LineArtPass : ScriptableRenderPass
         {

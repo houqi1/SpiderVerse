@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SpiderVerse.LineArt;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -33,6 +34,8 @@ public sealed class SurfaceNoiseParticleEffectInspector : UnityEditor.Editor
 [ExecuteAlways]
 public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 {
+    internal static readonly List<SurfaceNoiseParticleEffect> ActiveEffects = new List<SurfaceNoiseParticleEffect>();
+
     [Serializable]
     public sealed class LayerSettings
     {
@@ -48,6 +51,16 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public Vector2 particleSize = new Vector2(0.012f, 0.028f);
         [Range(-0.1f, 0.1f)] public float surfaceOffset = 0.006f;
         [Range(-0.1f, 0.1f)] public float surfaceOffsetJitter = 0.004f;
+
+        [Header("Camera view influence")]
+        [Tooltip("Let the camera view fade back-facing particles and enlarge particles near the silhouette.")]
+        public bool cameraViewEffectEnabled;
+        [Range(0f, 1f), Tooltip("How strongly back-facing particles fade out.")]
+        public float cameraFacingStrength = 1f;
+        [Range(0.01f, 0.5f), Tooltip("Softness around the surface tangent where facing visibility changes.")]
+        public float cameraFacingSoftness = 0.15f;
+        [Range(0f, 1f), Tooltip("Maximum particle size increase at grazing angles.")]
+        public float cameraSilhouetteSizeBoost = 0.35f;
     }
 
     [Header("Surface and distribution")]
@@ -136,8 +149,8 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 
     private void OnEnable()
     {
-        RenderPipelineManager.beginCameraRendering -= DrawForCamera;
-        RenderPipelineManager.beginCameraRendering += DrawForCamera;
+        if (!ActiveEffects.Contains(this))
+            ActiveEffects.Add(this);
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.update -= EditorTick;
         UnityEditor.EditorApplication.update += EditorTick;
@@ -151,10 +164,14 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             RebuildEffect();
     }
 
-    private void DrawForCamera(ScriptableRenderContext context, Camera camera)
+    internal void DrawFromRenderPass(CommandBuffer commandBuffer, Camera camera,
+        ObjectLineArtFeature.CameraSample cameraSample)
     {
-        if (isActiveAndEnabled && initialized && camera.cameraType != CameraType.Preview)
-            gpu?.Draw(camera, gameObject.layer);
+        if (!isActiveAndEnabled || !initialized || gpu == null || commandBuffer == null || camera == null ||
+            (camera.cullingMask & (1 << gameObject.layer)) == 0)
+            return;
+
+        gpu.Draw(commandBuffer, camera, cameraSample, layers);
     }
 
     private void OnValidate()
@@ -599,7 +616,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
                 if (source.Batches == null || source.Batches.Length != layers.Length)
                     source.Batches = new SurfaceNoiseGpu.Batch[layers.Length];
                 Material material = layer != null ? layer.particleMaterial : null;
-                source.Batches[layerIndex] = gpu.AddBatch(material, anchors[sourceIndex], source.CurrentVertices.Count);
+                source.Batches[layerIndex] = gpu.AddBatch(material, anchors[sourceIndex], source.CurrentVertices.Count, layerIndex);
             }
         }
         PrepareTextureData();
@@ -760,7 +777,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 
     private void OnDisable()
     {
-        RenderPipelineManager.beginCameraRendering -= DrawForCamera;
+        ActiveEffects.Remove(this);
         gpu?.Dispose();
         gpu = null;
 #if UNITY_EDITOR
@@ -784,6 +801,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 
     private void OnDestroy()
     {
+        ActiveEffects.Remove(this);
         gpu?.Dispose();
         gpu = null;
         ReleaseBakedMeshes();

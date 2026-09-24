@@ -443,7 +443,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &419351072
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9432,6 +9432,105 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   anchorOverride: {fileID: 0}
+--- !u!114 &775437506
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1812348927}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b860d027d3a94c00bd9d53e2f3794db4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  targetRenderers:
+  - {fileID: 1812348938}
+  - {fileID: 1812348937}
+  - {fileID: 1812348936}
+  - {fileID: 1812348935}
+  - {fileID: 1812348931}
+  candidateCount: 2077
+  seed: 173
+  distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+  regionMask: {fileID: 0}
+  noiseTiling: {x: 0.41, y: 0.4}
+  noiseOffset: {x: 0, y: 0}
+  threshold: 0.586
+  softness: 0.108
+  particleMaterial: {fileID: 2100000, guid: 62db0983c7bf6e74ab1131918e61d86f, type: 2}
+  particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
+  particleSize: {x: 0.2, y: 0.2}
+  surfaceOffset: 0
+  surfaceOffsetJitter: 0.004
+  layers:
+  - enabled: 0
+    distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+    regionMask: {fileID: 0}
+    noiseTiling: {x: 0.41, y: 0.4}
+    noiseOffset: {x: 0, y: 0}
+    threshold: 0.586
+    softness: 0.108
+    particleMaterial: {fileID: 2100000, guid: 62db0983c7bf6e74ab1131918e61d86f, type: 2}
+    particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
+    particleSize: {x: 0.4, y: 0.33}
+    surfaceOffset: -0.1
+    surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 1
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
+  - enabled: 0
+    distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+    regionMask: {fileID: 0}
+    noiseTiling: {x: 0.2, y: 0.2}
+    noiseOffset: {x: -0.44, y: -0.43}
+    threshold: 0.688
+    softness: 0.307
+    particleMaterial: {fileID: 2100000, guid: 89874adebce41964c94f6635c6a7d5bc, type: 2}
+    particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
+    particleSize: {x: 0.4, y: 0.36}
+    surfaceOffset: -0.018
+    surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 1
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
+  - enabled: 0
+    distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+    regionMask: {fileID: 0}
+    noiseTiling: {x: 1, y: -0.18}
+    noiseOffset: {x: -0.56, y: 1.75}
+    threshold: 0.707
+    softness: 0.365
+    particleMaterial: {fileID: 2100000, guid: 955f8d1e6e275234a8babe6ab42b7cef, type: 2}
+    particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
+    particleSize: {x: 0.4, y: 0.4}
+    surfaceOffset: -0.021
+    surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 1
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
+  - enabled: 1
+    distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+    regionMask: {fileID: 0}
+    noiseTiling: {x: 1, y: -0.18}
+    noiseOffset: {x: -0.56, y: 1.75}
+    threshold: 0.55
+    softness: 0.365
+    particleMaterial: {fileID: 2100000, guid: 6c27c4c30f717b54b9cb37d98a5b8a1a, type: 2}
+    particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
+    particleSize: {x: 0.03, y: 0.1}
+    surfaceOffset: 0
+    surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 0
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.01
+    cameraSilhouetteSizeBoost: 0
+  layerSettingsVersion: 1
+  anchorCompute: {fileID: 7200000, guid: c5c03f1a39a752741b3fd6588f107c6d, type: 3}
+  particleSystem: {fileID: 868734829}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -14737,7 +14836,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 936268806888020435, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       propertyPath: m_Layer
@@ -15090,6 +15189,10 @@ MonoBehaviour:
     particleSize: {x: 0.4, y: 0.5}
     surfaceOffset: -0.063
     surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 0
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
   - enabled: 1
     distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
     regionMask: {fileID: 0}
@@ -15102,6 +15205,10 @@ MonoBehaviour:
     particleSize: {x: 0.4, y: 0.5}
     surfaceOffset: -0.018
     surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 0
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
   - enabled: 1
     distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
     regionMask: {fileID: 0}
@@ -15114,6 +15221,10 @@ MonoBehaviour:
     particleSize: {x: 0.4, y: 0.4}
     surfaceOffset: -0.021
     surfaceOffsetJitter: 0
+    cameraViewEffectEnabled: 0
+    cameraFacingStrength: 1
+    cameraFacingSoftness: 0.15
+    cameraSilhouetteSizeBoost: 0.35
   layerSettingsVersion: 1
   anchorCompute: {fileID: 7200000, guid: c5c03f1a39a752741b3fd6588f107c6d, type: 3}
   particleSystem: {fileID: 868734829}
@@ -15828,6 +15939,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1812348929}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 775437506}
   m_SourcePrefab: {fileID: 100100000, guid: 6b64f9be2ca1a794cad5c58fc4b19371, type: 3}
 --- !u!1 &1812348927 stripped
 GameObject:

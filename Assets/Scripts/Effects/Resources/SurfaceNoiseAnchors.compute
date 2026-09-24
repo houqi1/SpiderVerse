@@ -13,6 +13,8 @@ struct Particle
 {
     float4 positionSize;
     float4 color;
+    float4 normalWS;
+    float4 surfacePosition;
 };
 StructuredBuffer<float3> _Vertices;
 StructuredBuffer<float3> _Normals;
@@ -38,9 +40,12 @@ void UpdateAnchors(uint3 threadID : SV_DispatchThreadID)
              + _Normals[a.indices.z] * a.barycentric.z;
     n = mul((float3x3)_NormalToWorld, n);
     n *= rsqrt(max(dot(n, n), 1e-20));
-    p = mul(_LocalToWorld, float4(p, 1)).xyz + n * (_SizeOffset.z + a.offsetRandom * _SizeOffset.w);
+    float3 surfacePositionWS = mul(_LocalToWorld, float4(p, 1)).xyz;
+    p = surfacePositionWS + n * (_SizeOffset.z + a.offsetRandom * _SizeOffset.w);
     Particle particle;
     particle.positionSize = float4(p, max(0, lerp(_SizeOffset.x, _SizeOffset.y, a.sizeRandom)));
     particle.color = _ParticleColor * a.brightness;
+    particle.normalWS = float4(n, 0);
+    particle.surfacePosition = float4(surfacePositionWS, 1);
     _SurfaceParticles[id] = particle;
 }

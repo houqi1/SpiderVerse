@@ -5,6 +5,9 @@ Shader "Custom/Character Noise Billboard"
         [HDR] _Color ("Particle Tint", Color) = (1, 1, 1, 1)
         _Cutoff ("Alpha Clip", Range(0, 1)) = 0.32
         _EdgeSoftness ("Edge Softness", Range(0.001, 0.5)) = 0.12
+        [HideInInspector] _SurfaceCameraPosition ("Surface Camera Position", Vector) = (0, 0, 0, 1)
+        [HideInInspector] _SurfaceCameraForward ("Surface Camera Forward", Vector) = (0, 0, 1, 0)
+        [HideInInspector] _SurfaceCameraInfluence ("Surface Camera Influence", Vector) = (0, 1, 0.15, 0.35)
     }
 
     SubShader
@@ -38,6 +41,9 @@ Shader "Custom/Character Noise Billboard"
                 half4 _Color;
                 half _Cutoff;
                 half _EdgeSoftness;
+                float4 _SurfaceCameraPosition;
+                float4 _SurfaceCameraForward;
+                float4 _SurfaceCameraInfluence;
             CBUFFER_END
 
             struct Attributes
@@ -53,6 +59,7 @@ Shader "Custom/Character Noise Billboard"
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 half4 color : COLOR;
+                nointerpolation half viewInfluence : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -62,6 +69,8 @@ Shader "Custom/Character Noise Billboard"
             {
                 float4 positionSize;
                 float4 color;
+                float4 normalWS;
+                float4 surfacePosition;
             };
             StructuredBuffer<SurfaceParticle> _SurfaceParticles;
 
@@ -77,8 +86,23 @@ Shader "Custom/Character Noise Billboard"
                 // View-plane axes affect the quad only; the world-space center stays fixed.
                 float3 right = UNITY_MATRIX_I_V._m00_m10_m20;
                 float3 up = UNITY_MATRIX_I_V._m01_m11_m21;
+                float influenceEnabled = step(0.5, _SurfaceCameraInfluence.x);
+                float3 cameraForward = normalize(_SurfaceCameraForward.xyz);
+                float3 toCamera = _SurfaceCameraPosition.xyz - p.positionSize.xyz;
+                float toCameraLengthSq = dot(toCamera, toCamera);
+                float3 perspectiveView = toCameraLengthSq > 1e-8
+                    ? toCamera * rsqrt(toCameraLengthSq)
+                    : -cameraForward;
+                float3 viewDirection = _SurfaceCameraForward.w > 0.5 ? -cameraForward : perspectiveView;
+                float facing = dot(normalize(p.normalWS.xyz), viewDirection);
+                float frontFacing = smoothstep(-max(_SurfaceCameraInfluence.z, 0.01),
+                    max(_SurfaceCameraInfluence.z, 0.01), facing);
+                output.viewInfluence = lerp(1.0, frontFacing,
+                    influenceEnabled * saturate(_SurfaceCameraInfluence.y));
+                float silhouette = 1.0 - abs(facing);
+                float sizeMultiplier = 1.0 + silhouette * _SurfaceCameraInfluence.w * influenceEnabled;
                 float3 positionWS = p.positionSize.xyz +
-                    (right * corner.x + up * corner.y) * p.positionSize.w;
+                    (right * corner.x + up * corner.y) * (p.positionSize.w * sizeMultiplier);
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.uv = corner + 0.5;
                 output.color = p.color * _Color;
@@ -94,6 +118,7 @@ Shader "Custom/Character Noise Billboard"
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
                 output.color = input.color * _Color;
+                output.viewInfluence = 1.0;
                 return output;
             }
 #endif
@@ -105,7 +130,7 @@ Shader "Custom/Character Noise Billboard"
                 float2 centered = input.uv * 2.0 - 1.0;
                 float inside = 1.0 - dot(centered, centered);
                 float coverage = smoothstep(0.0, max(_EdgeSoftness, 1e-4), inside);
-                clip(coverage * input.color.a - _Cutoff);
+                clip(coverage * input.color.a * input.viewInfluence - _Cutoff);
                 return half4(input.color.rgb, 1.0h);
             }
             ENDHLSL

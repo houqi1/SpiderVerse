@@ -25,11 +25,13 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         internal readonly Material material;
         internal readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
         internal int count;
+        internal int layerIndex;
         internal Bounds bounds;
         internal bool visible;
-        internal Batch(Material template, List<Anchor> data, int vertexCount)
+        internal Batch(Material template, List<Anchor> data, int vertexCount, int layerIndex)
         {
             sourceMaterial = template;
+            this.layerIndex = layerIndex;
             if (template != null)
             {
                 material = new Material(template) { hideFlags = HideFlags.HideAndDontSave, enableInstancing = true };
@@ -40,7 +42,7 @@ internal sealed class SurfaceNoiseGpu : IDisposable
             vertices = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vertexCount, 12);
             normals = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vertexCount, 12);
             anchors = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 48);
-            particles = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 32);
+            particles = new GraphicsBuffer(GraphicsBuffer.Target.Structured, count, 64);
             anchors.SetData(data);
             properties.SetBuffer("_SurfaceParticles", particles);
         }
@@ -60,6 +62,9 @@ internal sealed class SurfaceNoiseGpu : IDisposable
     private readonly ComputeShader compute;
     private readonly int kernel;
     private readonly List<Batch> batches = new List<Batch>();
+    private static readonly int CameraPositionId = Shader.PropertyToID("_SurfaceCameraPosition");
+    private static readonly int CameraForwardId = Shader.PropertyToID("_SurfaceCameraForward");
+    private static readonly int CameraInfluenceId = Shader.PropertyToID("_SurfaceCameraInfluence");
 
     internal SurfaceNoiseGpu(ComputeShader shader, Material template)
     {
@@ -68,9 +73,9 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         kernel = compute.FindKernel("UpdateAnchors");
     }
 
-    internal Batch AddBatch(Material template, List<Anchor> anchors, int vertexCount)
+    internal Batch AddBatch(Material template, List<Anchor> anchors, int vertexCount, int layerIndex)
     {
-        var batch = new Batch(template, anchors, vertexCount);
+        var batch = new Batch(template, anchors, vertexCount, layerIndex);
         batches.Add(batch);
         return batch;
     }
@@ -97,12 +102,15 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         compute.SetBuffer(kernel, "_Anchors", batch.anchors);
         compute.SetBuffer(kernel, "_SurfaceParticles", batch.particles);
         compute.Dispatch(kernel, (batch.count + 63) / 64, 1, 1);
-        bounds.Expand(2f * (Mathf.Max(size.x, size.y) + Mathf.Abs(offset) + Mathf.Abs(jitter)));
+        bounds.Expand(2f * (1.5f * Mathf.Max(size.x, size.y) + Mathf.Abs(offset) + Mathf.Abs(jitter)));
         batch.bounds = bounds;
     }
 
-    internal void Draw(Camera camera, int layer)
+    internal void Draw(CommandBuffer commandBuffer, Camera camera,
+        SpiderVerse.LineArt.ObjectLineArtFeature.CameraSample cameraSample,
+        SurfaceNoiseParticleEffect.LayerSettings[] layerSettings)
     {
+        if (commandBuffer == null || camera == null) return;
         foreach (var batch in batches)
         {
             if (!batch.visible || batch.count == 0 || batch.sourceMaterial == null || batch.material == null) continue;
@@ -112,16 +120,23 @@ internal sealed class SurfaceNoiseGpu : IDisposable
             batch.material.CopyPropertiesFromMaterial(batch.sourceMaterial);
             batch.material.enableInstancing = true;
             batch.material.EnableKeyword("SURFACE_NOISE_GPU");
-            var parameters = new RenderParams(batch.material)
-            {
-                camera = camera,
-                layer = layer,
-                worldBounds = batch.bounds,
-                matProps = batch.properties,
-                shadowCastingMode = ShadowCastingMode.Off,
-                receiveShadows = false
-            };
-            Graphics.RenderPrimitives(parameters, MeshTopology.Triangles, 6, batch.count);
+            SurfaceNoiseParticleEffect.LayerSettings settings = layerSettings != null &&
+                batch.layerIndex >= 0 && batch.layerIndex < layerSettings.Length
+                    ? layerSettings[batch.layerIndex]
+                    : null;
+            bool influenceEnabled = settings != null && settings.cameraViewEffectEnabled;
+            batch.properties.SetVector(CameraPositionId, new Vector4(
+                cameraSample.position.x, cameraSample.position.y, cameraSample.position.z, 1f));
+            batch.properties.SetVector(CameraForwardId, new Vector4(
+                cameraSample.forward.x, cameraSample.forward.y, cameraSample.forward.z,
+                cameraSample.orthographic ? 1f : 0f));
+            batch.properties.SetVector(CameraInfluenceId, new Vector4(
+                influenceEnabled ? 1f : 0f,
+                settings != null ? Mathf.Clamp01(settings.cameraFacingStrength) : 0f,
+                settings != null ? Mathf.Max(0.01f, settings.cameraFacingSoftness) : 0.15f,
+                settings != null ? Mathf.Clamp01(settings.cameraSilhouetteSizeBoost) : 0f));
+            commandBuffer.DrawProcedural(Matrix4x4.identity, batch.material, 0,
+                MeshTopology.Triangles, 6, batch.count, batch.properties);
         }
     }
 
