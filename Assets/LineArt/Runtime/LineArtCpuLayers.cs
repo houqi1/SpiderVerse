@@ -47,7 +47,7 @@ namespace SpiderVerse.LineArt
         Task<Work> pending;
         LineArtGeometry.Extraction extraction;
         LineArtGeometry.View extractedView;
-        int extractionHash,lastSnapshotHash;bool hasSnapshot,repaintQueued,deferred;
+        int extractionHash,lastSnapshotHash,lastCameraGeneration=-1;bool hasSnapshot,repaintQueued,deferred;
         double nextUpdate;
         internal string Stats {get;private set;}="CPU layers initializing";
         internal int ExtractionCount {get;private set;}
@@ -78,12 +78,12 @@ namespace SpiderVerse.LineArt
             }
             foreach(var old in batches)if(!nextBatches.Contains(old))old.Dispose();batches.Clear();batches.AddRange(nextBatches);
         }
-        internal void Update(LineArtSettings settings,Shader shader,int width,int height)
+        internal void Update(LineArtSettings settings,Shader shader,int width,int height,int cameraGeneration=-1,double nextCameraUpdate=-1)
         {
             repaintQueued=false;drawings.Clear();layers.Refresh(settings,camera);ConfigureBatches();
             if(material.shader!=shader)material.shader=shader;
             int hash=settings.ExtractionHash();
-            if(layers.UnionChanged||extractionHash!=hash){Suspend();extraction=null;hasSnapshot=false;nextUpdate=0;extractionHash=hash;}
+            if(layers.UnionChanged||extractionHash!=hash){Suspend();extraction=null;hasSnapshot=false;nextUpdate=0;lastCameraGeneration=-1;extractionHash=hash;}
             if(layers.draws.Count==0){Suspend();return;}
             if(pending!=null&&pending.IsCompleted)
             {
@@ -95,16 +95,21 @@ namespace SpiderVerse.LineArt
                 }else if(pending.IsFaulted)Debug.LogException(pending.Exception);
                 pending=null;
             }
-            double now=Time.realtimeSinceStartupAsDouble;deferred=pending==null&&now<nextUpdate;
+            double now=LineArtTime.Now;
+            bool external=cameraGeneration>=0;
+            bool due=external?cameraGeneration!=lastCameraGeneration||!hasSnapshot:now>=nextUpdate||!hasSnapshot;
+            if(external)nextUpdate=nextCameraUpdate;
+            deferred=pending==null&&!due;
             if(pending==null)
             {
                 bool rebuild=false;LineArtGeometry.Snapshot[] snapshots=null;
                 var view=extractedView;
-                if(now>=nextUpdate||!hasSnapshot)
+                if(due)
                 {
                     snapshots=capture(camera,layers.targets,settings);
                     view=new LineArtGeometry.View{matrix=camera.projectionMatrix*camera.worldToCameraMatrix,position=camera.transform.position,toCamera=-camera.transform.forward,perspective=!camera.orthographic,width=width,height=height};
-                    int current=snapshotHash(snapshots,view);rebuild=!hasSnapshot||current!=lastSnapshotHash||extraction==null;lastSnapshotHash=current;hasSnapshot=true;nextUpdate=now+1.0/Math.Max(1,settings.updateRate);
+                    int current=snapshotHash(snapshots,view);rebuild=!hasSnapshot||current!=lastSnapshotHash||extraction==null;lastSnapshotHash=current;hasSnapshot=true;
+                    if(external)lastCameraGeneration=cameraGeneration;else nextUpdate=now+1.0/Math.Max(1,settings.updateRate);
                 }
                 var requests=new List<Request>();
                 foreach(var b in batches)if(rebuild||b.dirty)requests.Add(new Request{batch=b,ids=b.ids,settings=settings.WithAppearance(b.appearance)});

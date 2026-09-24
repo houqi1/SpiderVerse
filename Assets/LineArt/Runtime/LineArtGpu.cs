@@ -66,7 +66,9 @@ namespace SpiderVerse.LineArt
         Vector4[] objectData; Int4[] materialData;
         int faceCount,edgeCount,nodeCount,root,capacity,segmentCapacity,hashSize;
         bool disposed,readbackPending; double nextReadback;
-        double nextUpdate;int lastGeometryHash;bool deferredUpdate,repaintQueued;
+        double nextUpdate;int lastGeometryHash,lastCameraGeneration;bool deferredUpdate,repaintQueued;
+        int externalGeneration=-1;double externalNext;
+        public void UseCameraStep(int generation,double next){externalGeneration=generation;externalNext=next;}
         internal bool RequestDeferredRepaint(double now){if(!deferredUpdate||repaintQueued||now<nextUpdate||Failed)return false;repaintQueued=true;return true;}
         int lastInputHash,lastViewHash;bool hasInput,hasIntersections;
         public string Stats {get;private set;}="GPU initializing";
@@ -88,7 +90,8 @@ namespace SpiderVerse.LineArt
             layers.Refresh(settings,camera);
             if(layers.draws.Count==0)return true;
             // Selection is consumed only on a geometry update; avoid scanning/sorting the scene on draw-only frames.
-            if(faceCount>0&&!Failed&&!layers.UnionChanged&&Time.realtimeSinceStartupAsDouble<nextUpdate&&settings.ExtractionHash()==lastGeometryHash){ConfigureBatches();return true;}
+            bool rateHeld=externalGeneration>=0?externalGeneration==lastCameraGeneration:LineArtTime.Now<nextUpdate;
+            if(faceCount>0&&!Failed&&!layers.UnionChanged&&rateHeld&&settings.ExtractionHash()==lastGeometryHash){ConfigureBatches();return true;}
             targets.Clear();
             targets.UnionWith(layers.targets);
             if(Time.realtimeSinceStartupAsDouble>=nextScan){scene=UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.InstanceID);nextScan=Time.realtimeSinceStartupAsDouble+1;}
@@ -244,8 +247,10 @@ namespace SpiderVerse.LineArt
         {
             if(disposed||faceCount==0||Failed)return false;
             repaintQueued=false;deferredUpdate=false;int geometryHash=s.ExtractionHash();
-            if(Time.realtimeSinceStartupAsDouble<nextUpdate&&geometryHash==lastGeometryHash){deferredUpdate=true;return false;}
-            nextUpdate=Time.realtimeSinceStartupAsDouble+1.0/Math.Max(1,s.updateRate);
+            bool rateHeld=externalGeneration>=0?externalGeneration==lastCameraGeneration:LineArtTime.Now<nextUpdate;
+            if(rateHeld&&geometryHash==lastGeometryHash){deferredUpdate=true;return false;}
+            if(externalGeneration>=0){lastCameraGeneration=externalGeneration;nextUpdate=externalNext;}
+            else nextUpdate=LineArtTime.Now+1.0/Math.Max(1,s.updateRate);
             // A cheap pose/material fingerprint avoids both vertex readback and idle compute work.
             int inputHash=17;frameMaterials.Clear();
             unchecked {for(int i=0;i<sources.Count;i++){
@@ -303,7 +308,7 @@ namespace SpiderVerse.LineArt
         {
             m.SetFloat("_DepthOffset",s.depthOffset);m.SetColor("_Color",s.color);m.SetVector("_Resolution",new Vector4(width,height,0,0));m.SetFloat("_Width",s.thickness);m.SetFloat("_WorldSizeUnit",s.scaleWithDistance?Mathf.Max(.00001f,s.sizeUnit):0);m.SetFloat("_Taper",s.thicknessCurve?s.endTaper:0);m.SetFloat("_Transition",s.thicknessTransition);m.SetFloat("_Noise",s.noise);m.SetFloat("_NoiseFrequency",Mathf.Clamp(s.noiseFrequency,.1f,32));m.SetVector("_Offset",s.offset);m.SetVector("_RandomOffset",s.randomOffset);m.SetTexture("_StrokeTex",s.texture?s.texture:Texture2D.whiteTexture);m.SetVector("_TextureST",new Vector4(s.textureTiling.x,s.textureTiling.y,s.textureOffset.x,s.textureOffset.y));float angle=s.textureRotation*Mathf.Deg2Rad;m.SetVector("_TextureRotation",new Vector4(Mathf.Cos(angle),Mathf.Sin(angle),0,0));m.SetFloat("_HasTexture",s.texture?1:0);m.SetFloat("_TextureStrength",s.textureStrength);m.SetFloat("_TextureRepeat",s.textureRepeats);m.SetFloat("_TextureMask",s.darkOnWhiteMask?1:0);
         }
-        void ReleaseGeometry(){foreach(var batch in batches)batch.Dispose();batches.Clear();nextBatches.Clear();foreach(var b in buffers)b.Dispose();buffers.Clear();foreach(var s in sources)s.staticBuffer?.Dispose();foreach(var b in frameWrappers)b.Dispose();frameWrappers.Clear();sources.Clear();levels.Clear();faceCount=0;nextUpdate=0;hasInput=false;hasIntersections=false;}
+        void ReleaseGeometry(){foreach(var batch in batches)batch.Dispose();batches.Clear();nextBatches.Clear();foreach(var b in buffers)b.Dispose();buffers.Clear();foreach(var s in sources)s.staticBuffer?.Dispose();foreach(var b in frameWrappers)b.Dispose();frameWrappers.Clear();sources.Clear();levels.Clear();faceCount=0;nextUpdate=0;lastCameraGeneration=0;hasInput=false;hasIntersections=false;}
         public void Dispose(){if(disposed)return;disposed=true;ReleaseGeometry();CoreUtils.Destroy(material);CoreUtils.Destroy(compute);}
     }
 }

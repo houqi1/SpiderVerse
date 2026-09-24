@@ -298,8 +298,8 @@ MonoBehaviour:
       m_Bits: 0
     depthEpsilon: 0.00001
   showInSceneView: 1
-  lastStats: 'CPU: 4 layers / 4 stroke sets / 245 shared chains / 1182 visible spans
-    / 2057 candidates'
+  lastStats: 'GPU: 4 layers / 4 stroke sets / 9 meshes / 8214 triangles / 12882 edges
+    / 1955 candidates / 1210 visible spans / 3070 ribbon segments / 0 intersections'
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

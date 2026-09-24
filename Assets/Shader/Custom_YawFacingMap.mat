@@ -13,6 +13,7 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
   m_InvalidKeywords:
+  - _USEDOTMAP_ON
   - _USEOBJECTPIVOT_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -28,27 +29,107 @@ Material:
         m_Texture: {fileID: 2800000, guid: 0bfa1ec43f3b98749887c674fd1b7c02, type: 3}
         m_Scale: {x: 4, y: 4}
         m_Offset: {x: 0, y: 0}
+    - _BaseMap1:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BaseMap2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BaseMap3:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _ClipMap:
-        m_Texture: {fileID: 2800000, guid: e2fc0c5e8ee52394397d8df7d78947d0, type: 3}
-        m_Scale: {x: 0.6, y: 0.6}
+        m_Texture: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+        m_Scale: {x: 1, y: 1}
         m_Offset: {x: -0.14, y: -0.41}
+    - _ClipMap1:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ClipMap2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ClipMap3:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _NoiseMap:
         m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NoiseMap1:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NoiseMap2:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _NoiseMap3:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _ClipSoftness: 0.023
-    - _ClipThreshold: 0.202
+    - _ClipSoftness1: 0.1
+    - _ClipSoftness2: 0.1
+    - _ClipSoftness3: 0.1
+    - _ClipThreshold: 0.3
+    - _ClipThreshold1: 0.5
+    - _ClipThreshold2: 0.5
+    - _ClipThreshold3: 0.5
     - _Cull: 2
+    - _Cull1: 2
+    - _Cull2: 2
+    - _Cull3: 2
+    - _DotDensity: 45.1
+    - _DotDensity1: 10
+    - _DotDensity2: 10
+    - _DotDensity3: 10
+    - _DotSize: 0.004
+    - _DotSize1: 0.03
+    - _DotSize2: 0.03
+    - _DotSize3: 0.03
     - _FresnelIntensity: 0.537
+    - _FresnelIntensity1: 1
+    - _FresnelIntensity2: 1
+    - _FresnelIntensity3: 1
     - _FresnelPower: 3.36
+    - _FresnelPower1: 2
+    - _FresnelPower2: 2
+    - _FresnelPower3: 2
     - _FresnelRimIntensity: 1
+    - _FresnelRimIntensity1: 0
+    - _FresnelRimIntensity2: 0
+    - _FresnelRimIntensity3: 0
     - _FresnelRimPower: 8
-    - _NormalExtrusion: 0.08
+    - _FresnelRimPower1: 2
+    - _FresnelRimPower2: 2
+    - _FresnelRimPower3: 2
+    - _InvertDots: 0
+    - _InvertDots1: 0
+    - _InvertDots2: 0
+    - _InvertDots3: 0
+    - _LayerCount: 1
+    - _NormalExtrusion: 0.1
+    - _NormalExtrusion1: 0.015
+    - _NormalExtrusion2: 0.03
+    - _NormalExtrusion3: 0.045
+    - _UseDotMap: 1
+    - _UseDotMap1: 0
+    - _UseDotMap2: 0
+    - _UseDotMap3: 0
     - _UseObjectPivot: 1
     m_Colors:
     - _AnchorWS: {r: 0, g: 0, b: 0, a: 0}
     - _BaseColor: {r: 0, g: 1.216786, b: 1.2039859, a: 1}
+    - _BaseColor1: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor2: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor3: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

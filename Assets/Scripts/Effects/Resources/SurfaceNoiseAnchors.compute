@@ -1,0 +1,46 @@
+#pragma kernel UpdateAnchors
+
+struct Anchor
+{
+    uint3 indices;
+    float brightness;
+    float3 barycentric;
+    float sizeRandom;
+    float offsetRandom;
+    float3 padding;
+};
+struct Particle
+{
+    float4 positionSize;
+    float4 color;
+};
+StructuredBuffer<float3> _Vertices;
+StructuredBuffer<float3> _Normals;
+StructuredBuffer<Anchor> _Anchors;
+RWStructuredBuffer<Particle> _SurfaceParticles;
+uint _AnchorCount;
+float4x4 _LocalToWorld;
+float4x4 _NormalToWorld;
+float4 _SizeOffset;
+float4 _ParticleColor;
+
+[numthreads(64, 1, 1)]
+void UpdateAnchors(uint3 threadID : SV_DispatchThreadID)
+{
+    uint id = threadID.x;
+    if (id >= _AnchorCount) return;
+    Anchor a = _Anchors[id];
+    float3 p = _Vertices[a.indices.x] * a.barycentric.x
+             + _Vertices[a.indices.y] * a.barycentric.y
+             + _Vertices[a.indices.z] * a.barycentric.z;
+    float3 n = _Normals[a.indices.x] * a.barycentric.x
+             + _Normals[a.indices.y] * a.barycentric.y
+             + _Normals[a.indices.z] * a.barycentric.z;
+    n = mul((float3x3)_NormalToWorld, n);
+    n *= rsqrt(max(dot(n, n), 1e-20));
+    p = mul(_LocalToWorld, float4(p, 1)).xyz + n * (_SizeOffset.z + a.offsetRandom * _SizeOffset.w);
+    Particle particle;
+    particle.positionSize = float4(p, max(0, lerp(_SizeOffset.x, _SizeOffset.y, a.sizeRandom)));
+    particle.color = _ParticleColor * a.brightness;
+    _SurfaceParticles[id] = particle;
+}

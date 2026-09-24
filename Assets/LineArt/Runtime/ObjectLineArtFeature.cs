@@ -10,6 +10,15 @@ using UnityEngine.Rendering.Universal;
 
 namespace SpiderVerse.LineArt
 {
+    // Scene-view camera drags repaint without a player-loop tick, so Time.realtimeSinceStartup
+    // stays latched for the whole gesture. The line-art step and the shell global share this clock.
+    static class LineArtTime
+    {
+        static readonly double ToSeconds = 1.0 / System.Diagnostics.Stopwatch.Frequency;
+        static readonly long Origin = System.Diagnostics.Stopwatch.GetTimestamp();
+        public static double Now => (System.Diagnostics.Stopwatch.GetTimestamp() - Origin) * ToSeconds;
+    }
+
     // Only snapshots cross the worker boundary. Unity scene, skinning and Mesh upload stay on the main thread.
     public sealed class ObjectLineArtFeature : ScriptableRendererFeature
     {
@@ -24,6 +33,31 @@ namespace SpiderVerse.LineArt
         [SerializeField, HideInInspector] string lastStats;
         public string LastStats => lastStats;
         LineArtPass pass;
+        static readonly int LineArtCameraPositionId = Shader.PropertyToID("_LineArtCameraPosition");
+        readonly Dictionary<int, CameraHold> cameraHolds = new Dictionary<int, CameraHold>();
+        sealed class CameraHold { public Vector3 position; public double nextUpdate; public int generation; }
+        // Steps the camera on line art's updateRate and publishes it before the frame draws.
+        public void SyncLineArtCamera(Camera camera)
+        {
+            if (!camera) return;
+            int id = camera.GetInstanceID();
+            if (!cameraHolds.TryGetValue(id, out var hold))
+            {
+                hold = new CameraHold();
+                cameraHolds.Add(id, hold);
+            }
+            double now = LineArtTime.Now;
+            if (hold.generation == 0 || now >= hold.nextUpdate)
+            {
+                hold.position = camera.transform.position;
+                hold.nextUpdate = now + 1.0 / Math.Max(1, settings.updateRate);
+                hold.generation++;
+            }
+            Vector3 p = hold.position;
+            Shader.SetGlobalVector(LineArtCameraPositionId, new Vector4(p.x, p.y, p.z, 1f));
+        }
+        public int LineArtCameraGeneration(Camera camera) => camera && cameraHolds.TryGetValue(camera.GetInstanceID(), out var hold) ? hold.generation : 0;
+        public double LineArtCameraNextUpdate(Camera camera) => camera && cameraHolds.TryGetValue(camera.GetInstanceID(), out var hold) ? hold.nextUpdate : 0;
         public void InvalidateGpuGeometry()=>pass?.InvalidateGpuGeometry();
         // URP calls Create from OnValidate for every Inspector edit. Keep camera meshes
         // and in-flight work alive; actual renderer disposal still releases them.
@@ -33,6 +67,7 @@ namespace SpiderVerse.LineArt
             var c=renderingData.cameraData;
             if(c.cameraType!=CameraType.Game && !(showInSceneView&&c.cameraType==CameraType.SceneView))return;
             if(c.renderType==CameraRenderType.Overlay || ObjectLineArtSource.Active.Count==0)return;
+            SyncLineArtCamera(c.camera);
             if(pass!=null)renderer.EnqueuePass(pass);
         }
         protected override void Dispose(bool disposing) {pass?.Dispose();pass=null;}
@@ -53,7 +88,7 @@ namespace SpiderVerse.LineArt
                 public Camera camera;public Mesh mesh,stagingMesh;public Material material;public Task<LineArtGeometry.Result> pending;
                 public CancellationTokenSource cancel=new CancellationTokenSource();public double nextUpdate;public int geometryHash;
                 public readonly LineArtGeometry.IntersectionCache intersections = new LineArtGeometry.IntersectionCache();
-                public string sourceSignature;public bool ready, hasSnapshot, deferredCapture, repaintQueued;public int snapshotHash;
+                public string sourceSignature;public bool ready, hasSnapshot, deferredCapture, repaintQueued;public int snapshotHash, cameraGeneration;
             }
             sealed class PassData {public Mesh mesh;public Material material;public MaterialPropertyBlock properties;}
             sealed class GpuPassData {public LineArtGpu gpu;public Camera camera;public int width,height;public LineArtSettings settings;public TextureHandle color,depth;public ObjectLineArtFeature owner;}
@@ -66,7 +101,7 @@ namespace SpiderVerse.LineArt
                 if(gpu.Failed)return null;
                 if(cpuLayers.TryGetValue(id,out var layered))layered.Suspend();
                 if(cameras.TryGetValue(id,out var old)){old.deferredCapture=false;old.repaintQueued=false;if(old.pending!=null){old.cancel.Cancel();old.cancel.Dispose();old.cancel=new CancellationTokenSource();old.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);old.pending=null;old.hasSnapshot=false;}}
-                try {return gpu.Prepare(camera,owner.settings)?gpu:null;}
+                try {gpu.UseCameraStep(owner.LineArtCameraGeneration(camera),owner.LineArtCameraNextUpdate(camera));return gpu.Prepare(camera,owner.settings)?gpu:null;}
                 catch(Exception e){gpu.MarkFailed();if(!gpuWarning){Debug.LogWarning("Line Art GPU setup failed; using CPU reference: "+e);gpuWarning=true;}return null;}
             }
             public LineArtPass(ObjectLineArtFeature owner) {
@@ -81,7 +116,7 @@ namespace SpiderVerse.LineArt
             void EditorUpdate()
             {
                 if(Application.isBatchMode || UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode || !owner || !owner.isActive || ObjectLineArtSource.Active.Count==0)return;
-                double now=Time.realtimeSinceStartupAsDouble;bool repaint=false;
+                double now=LineArtTime.Now;bool repaint=false;
                 foreach(var state in cameras.Values) {
                     if(!state.camera || state.repaintQueued)continue;
                     if(state.pending!=null && state.pending.IsCompleted || state.deferredCapture && now>=state.nextUpdate) {
@@ -186,9 +221,11 @@ namespace SpiderVerse.LineArt
                     } else if(state.pending.IsFaulted)Debug.LogException(state.pending.Exception);
                     state.pending=null;
                 }
-                double now=Time.realtimeSinceStartupAsDouble;
-                state.deferredCapture=state.pending==null&&now<state.nextUpdate;
-                if(state.pending==null&&now>=state.nextUpdate) {
+                int cameraGeneration=owner.LineArtCameraGeneration(camera);
+                state.nextUpdate=owner.LineArtCameraNextUpdate(camera);
+                bool cameraDue=cameraGeneration!=state.cameraGeneration||!state.hasSnapshot;
+                state.deferredCapture=state.pending==null&&!cameraDue;
+                if(state.pending==null&&cameraDue) {
                     var snapshot=Capture(camera,targets,s);
                     var view=new LineArtGeometry.View{matrix=camera.projectionMatrix*camera.worldToCameraMatrix,position=camera.transform.position,toCamera=-camera.transform.forward,perspective=!camera.orthographic,width=width,height=height};
                     int snapshotHash = SnapshotHash(snapshot, view);
@@ -197,7 +234,7 @@ namespace SpiderVerse.LineArt
                         state.pending=Task.Run(()=>LineArtGeometry.Build(snapshot,view,copy,token,state.intersections,modelHash),token);
                         state.snapshotHash=snapshotHash;state.hasSnapshot=true;
                     }
-                    state.nextUpdate=now+1.0/Math.Max(1,s.updateRate);
+                    state.cameraGeneration=cameraGeneration;
                 }
                 var m=state.material;if(m.shader!=owner.strokeShader)m.shader=owner.strokeShader;
                 m.SetFloat("_DepthOffset",s.depthOffset);m.SetColor("_Color",s.color);m.SetVector("_Resolution",new Vector4(width,height,0,0));
@@ -215,7 +252,7 @@ namespace SpiderVerse.LineArt
                 if(!owner.strokeShader)return null;
                 int id=camera.GetInstanceID();if(!cpuLayers.TryGetValue(id,out var state)){state=new LineArtCpuLayers(camera,owner.strokeShader,Capture,SnapshotHash);cpuLayers.Add(id,state);}
                 if(cameras.TryGetValue(id,out var legacy)){legacy.deferredCapture=false;if(legacy.pending!=null){legacy.cancel.Cancel();legacy.cancel.Dispose();legacy.cancel=new CancellationTokenSource();legacy.pending.ContinueWith(t=>{var ignored=t.Exception;},TaskContinuationOptions.OnlyOnFaulted);legacy.pending=null;legacy.hasSnapshot=false;}}
-                state.Update(owner.settings,owner.strokeShader,width,height);owner.lastStats=state.Stats;return state;
+                state.Update(owner.settings,owner.strokeShader,width,height,owner.LineArtCameraGeneration(camera),owner.LineArtCameraNextUpdate(camera));owner.lastStats=state.Stats;return state;
             }
             public override void RecordRenderGraph(RenderGraph graph,ContextContainer frameData)
             {
@@ -225,7 +262,7 @@ namespace SpiderVerse.LineArt
                     using(var builder=graph.AddUnsafePass<GpuPassData>("Object Line Art · GPU geometry",out var data)){
                         data.gpu=gpu;data.camera=camera.camera;data.width=camera.cameraTargetDescriptor.width;data.height=camera.cameraTargetDescriptor.height;data.settings=owner.settings.Copy();data.color=resources.activeColorTexture;data.depth=resources.activeDepthTexture;data.owner=owner;
                         builder.UseTexture(data.color,AccessFlags.ReadWrite);builder.UseTexture(data.depth,AccessFlags.Read);builder.AllowPassCulling(false);
-                        builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color,d.depth);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
+                        builder.SetRenderFunc((GpuPassData d,UnsafeGraphContext context)=>{context.cmd.SetRenderTarget(d.color,d.depth);var cmd=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);d.gpu.UseCameraStep(d.owner.LineArtCameraGeneration(d.camera),d.owner.LineArtCameraNextUpdate(d.camera));d.gpu.Execute(cmd,d.camera,d.width,d.height,d.settings);d.owner.lastStats=d.gpu.Stats;});
                     }return;
                 }
                 if(ObjectLineArtSource.HasLayers){
@@ -257,7 +294,7 @@ namespace SpiderVerse.LineArt
             public override void Execute(ScriptableRenderContext context,ref RenderingData renderingData)
             {
                 var camera=renderingData.cameraData;
-                var gpu=PrepareGpu(camera.camera);if(gpu!=null){var gc=CommandBufferPool.Get("Object Line Art GPU");gpu.Execute(gc,camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height,owner.settings);context.ExecuteCommandBuffer(gc);CommandBufferPool.Release(gc);owner.lastStats=gpu.Stats;return;}
+                var gpu=PrepareGpu(camera.camera);if(gpu!=null){var gc=CommandBufferPool.Get("Object Line Art GPU");gpu.UseCameraStep(owner.LineArtCameraGeneration(camera.camera),owner.LineArtCameraNextUpdate(camera.camera));gpu.Execute(gc,camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height,owner.settings);context.ExecuteCommandBuffer(gc);CommandBufferPool.Release(gc);owner.lastStats=gpu.Stats;return;}
                 if(ObjectLineArtSource.HasLayers){var layered=UpdateLayers(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);if(layered==null)return;var layeredCmd=CommandBufferPool.Get("Object Line Art layers");foreach(var d in layered.drawings)layeredCmd.DrawMesh(d.mesh,Matrix4x4.identity,d.material,0,0,d.properties);context.ExecuteCommandBuffer(layeredCmd);CommandBufferPool.Release(layeredCmd);return;}
                 if(cpuLayers.TryGetValue(camera.camera.GetInstanceID(),out var oldLayers))oldLayers.Suspend();
                 var state=Update(camera.camera,camera.cameraTargetDescriptor.width,camera.cameraTargetDescriptor.height);
