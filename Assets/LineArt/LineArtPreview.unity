@@ -9444,13 +9444,34 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b860d027d3a94c00bd9d53e2f3794db4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rendererCounts:
+  - renderer: {fileID: 1812348938}
+    overrideCount: 1
+    count: 4353
+    seedKey: 1
+  - renderer: {fileID: 1812348937}
+    overrideCount: 1
+    count: 1077
+    seedKey: 2
+  - renderer: {fileID: 1812348936}
+    overrideCount: 1
+    count: 3942
+    seedKey: 3
+  - renderer: {fileID: 1812348935}
+    overrideCount: 1
+    count: 148
+    seedKey: 4
+  - renderer: {fileID: 1812348931}
+    overrideCount: 1
+    count: 742
+    seedKey: 5
   targetRenderers:
   - {fileID: 1812348938}
   - {fileID: 1812348937}
   - {fileID: 1812348936}
   - {fileID: 1812348935}
   - {fileID: 1812348931}
-  candidateCount: 2077
+  candidateCount: 1566
   seed: 173
   distributionNoise: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
   regionMask: {fileID: 0}
@@ -9471,6 +9492,9 @@ MonoBehaviour:
     noiseOffset: {x: 0, y: 0}
     threshold: 0.586
     softness: 0.108
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 62db0983c7bf6e74ab1131918e61d86f, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.33}
@@ -9487,6 +9511,9 @@ MonoBehaviour:
     noiseOffset: {x: -0.44, y: -0.43}
     threshold: 0.688
     softness: 0.307
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 89874adebce41964c94f6635c6a7d5bc, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.36}
@@ -9503,6 +9530,9 @@ MonoBehaviour:
     noiseOffset: {x: -0.56, y: 1.75}
     threshold: 0.707
     softness: 0.365
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 955f8d1e6e275234a8babe6ab42b7cef, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.4}
@@ -9518,18 +9548,21 @@ MonoBehaviour:
     noiseTiling: {x: 1, y: -0.18}
     noiseOffset: {x: -0.56, y: 1.75}
     threshold: 0
-    softness: 0.365
+    softness: 0
+    preferSilhouetteDistribution: 1
+    frontFacingWeight: 1
+    silhouetteDistributionWidth: 1
     particleMaterial: {fileID: 2100000, guid: 6c27c4c30f717b54b9cb37d98a5b8a1a, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
-    particleSize: {x: 0.07, y: 0.05}
-    surfaceOffset: -0.0024
-    surfaceOffsetJitter: -0.0008
+    particleSize: {x: 0.01, y: 0.05}
+    surfaceOffset: 0
+    surfaceOffsetJitter: 0
     cameraViewEffectEnabled: 0
     cameraFacingStrength: 1
     cameraFacingSoftness: 0.01
-    cameraSilhouetteSizeBoost: 0
+    cameraSilhouetteSizeBoost: 0.694
   layerSettingsVersion: 1
-  useJumpFloodColor: 1
+  useJumpFloodColor: 0
   colorExtensionPixels: 128
   halfResolutionColorField: 1
   anchorCompute: {fileID: 7200000, guid: c5c03f1a39a752741b3fd6588f107c6d, type: 3}
@@ -15155,6 +15188,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b860d027d3a94c00bd9d53e2f3794db4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  rendererCounts: []
   targetRenderers:
   - {fileID: 142118381}
   - {fileID: 142118380}
@@ -15187,6 +15221,9 @@ MonoBehaviour:
     noiseOffset: {x: 0, y: 0}
     threshold: 0.586
     softness: 0.108
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 62db0983c7bf6e74ab1131918e61d86f, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.5}
@@ -15203,6 +15240,9 @@ MonoBehaviour:
     noiseOffset: {x: -0.44, y: 0}
     threshold: 0.732
     softness: 0.307
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 89874adebce41964c94f6635c6a7d5bc, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.5}
@@ -15219,6 +15259,9 @@ MonoBehaviour:
     noiseOffset: {x: -0.56, y: 1.75}
     threshold: 0.707
     softness: 0.365
+    preferSilhouetteDistribution: 0
+    frontFacingWeight: 0.2
+    silhouetteDistributionWidth: 0.5
     particleMaterial: {fileID: 2100000, guid: 955f8d1e6e275234a8babe6ab42b7cef, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
     particleSize: {x: 0.4, y: 0.4}

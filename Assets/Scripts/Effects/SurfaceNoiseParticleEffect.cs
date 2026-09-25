@@ -10,8 +10,55 @@ public sealed class SurfaceNoiseParticleEffectInspector : UnityEditor.Editor
 {
     public override void OnInspectorGUI()
     {
-        DrawDefaultInspector();
         var effect = (SurfaceNoiseParticleEffect)target;
+        serializedObject.Update();
+        using (new UnityEditor.EditorGUI.DisabledScope(true))
+            UnityEditor.EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
+        UnityEditor.EditorGUILayout.PropertyField(serializedObject.FindProperty("candidateCount"));
+        var targets = serializedObject.FindProperty("targetRenderers");
+        UnityEditor.EditorGUILayout.PropertyField(targets, true);
+        var counts = serializedObject.FindProperty("rendererCounts");
+        UnityEditor.EditorGUILayout.Space();
+        UnityEditor.EditorGUILayout.LabelField("Per Renderer Counts", UnityEditor.EditorStyles.boldLabel);
+        UnityEditor.EditorGUILayout.HelpBox("独立数量为每层 noise 剔除前的候选数。关闭 Override 时沿用全局 Candidate Count；启用后各 Renderer 内独立分布。", UnityEditor.MessageType.Info);
+        var displayed = new HashSet<Renderer>();
+        for (int i = 0; i < targets.arraySize; i++)
+        {
+            var renderer = targets.GetArrayElementAtIndex(i).objectReferenceValue as Renderer;
+            if (renderer == null || !displayed.Add(renderer)) continue;
+            int index = -1, nextKey = 1;
+            for (int j = 0; j < counts.arraySize; j++)
+            {
+                var entry = counts.GetArrayElementAtIndex(j);
+                if (entry.FindPropertyRelative("renderer").objectReferenceValue == renderer) index = j;
+                nextKey = Mathf.Max(nextKey, entry.FindPropertyRelative("seedKey").intValue + 1);
+            }
+            var item = index >= 0 ? counts.GetArrayElementAtIndex(index) : null;
+            bool overridden = item != null && item.FindPropertyRelative("overrideCount").boolValue;
+            UnityEditor.EditorGUILayout.BeginVertical(UnityEditor.EditorStyles.helpBox);
+            UnityEditor.EditorGUILayout.LabelField(renderer.name, UnityEditor.EditorStyles.boldLabel);
+            bool newOverride = UnityEditor.EditorGUILayout.Toggle("Override Count", overridden);
+            if (newOverride && item == null)
+            {
+                index = counts.arraySize++;
+                item = counts.GetArrayElementAtIndex(index);
+                item.FindPropertyRelative("renderer").objectReferenceValue = renderer;
+                item.FindPropertyRelative("count").intValue = effect.GetRendererCandidateCount(renderer);
+                item.FindPropertyRelative("seedKey").intValue = nextKey;
+            }
+            if (item != null) item.FindPropertyRelative("overrideCount").boolValue = newOverride;
+            using (new UnityEditor.EditorGUI.DisabledScope(!newOverride))
+            {
+                int value = newOverride ? item.FindPropertyRelative("count").intValue : effect.GetRendererCandidateCount(renderer);
+                int edited = Mathf.Max(0, UnityEditor.EditorGUILayout.IntField("Candidate Count", value));
+                if (newOverride) item.FindPropertyRelative("count").intValue = edited;
+            }
+            UnityEditor.EditorGUILayout.LabelField("生成数（所有启用层）", effect.GetRendererParticleCount(renderer).ToString());
+            UnityEditor.EditorGUILayout.EndVertical();
+        }
+        UnityEditor.EditorGUILayout.Space();
+        DrawPropertiesExcluding(serializedObject, "m_Script", "targetRenderers", "candidateCount", "rendererCounts");
+        serializedObject.ApplyModifiedProperties();
         UnityEditor.EditorGUILayout.HelpBox(
             "有效模型：" + effect.SurfaceCount + "    GPU 颗粒（全部启用层）：" + effect.SubmittedParticleCount,
             effect.SubmittedParticleCount > 0 ? UnityEditor.MessageType.Info : UnityEditor.MessageType.Warning);
@@ -46,6 +93,13 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public Vector2 noiseOffset;
         [Range(0f, 1f)] public float threshold = 0.56f;
         [Range(0f, 0.5f)] public float softness = 0.16f;
+        [Tooltip("Redistribute a fixed particle count toward side-facing surfaces; does not remove particles.")]
+        public bool preferSilhouetteDistribution;
+        [UnityEngine.Serialization.FormerlySerializedAs("frontFacingRetention")]
+        [Range(0f, 1f), Tooltip("Relative sampling weight of front-facing surfaces, not a retention fraction.")]
+        public float frontFacingWeight = 0.2f;
+        [Range(0.01f, 1f), Tooltip("Larger values extend the dense region toward front-facing surfaces.")]
+        public float silhouetteDistributionWidth = 0.5f;
         public Material particleMaterial;
         public Color particleColor = new Color(0.82f, 0.93f, 1f, 1f);
         public Vector2 particleSize = new Vector2(0.012f, 0.028f);
@@ -61,6 +115,72 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public float cameraFacingSoftness = 0.15f;
         [Range(0f, 1f), Tooltip("Maximum particle size increase at grazing angles.")]
         public float cameraSilhouetteSizeBoost = 0.35f;
+    }
+
+    [Serializable]
+    private sealed class RendererCountSettings
+    {
+        public Renderer renderer;
+        public bool overrideCount;
+        [Min(0)] public int count;
+        public int seedKey;
+    }
+
+    [SerializeField, HideInInspector] private List<RendererCountSettings> rendererCounts = new List<RendererCountSettings>();
+    private int builtRendererCountsHash;
+
+    public int GetRendererCandidateCount(Renderer renderer)
+    {
+        foreach (var source in sources) if (source.Renderer == renderer) return source.CandidateCount;
+        return 0;
+    }
+
+    public int GetRendererParticleCount(Renderer renderer)
+    {
+        int count = 0;
+        foreach (var source in sources)
+            if (source.Renderer == renderer && source.Batches != null)
+                foreach (var batch in source.Batches)
+                    if (batch != null && batch.visible) count += batch.count;
+        return count;
+    }
+
+    // Counts are candidate budgets per layer, before the existing noise/mask selection.
+    public void SetRendererCandidateCount(Renderer renderer, int count)
+    {
+        if (renderer == null) throw new ArgumentNullException(nameof(renderer));
+        var entry = rendererCounts.Find(x => x != null && x.renderer == renderer);
+        if (entry == null)
+        {
+            int key = 1;
+            foreach (var existing in rendererCounts) if (existing != null) key = Mathf.Max(key, existing.seedKey + 1);
+            entry = new RendererCountSettings { renderer = renderer, seedKey = key };
+            rendererCounts.Add(entry);
+        }
+        entry.overrideCount = true;
+        entry.count = Mathf.Max(0, count);
+    }
+
+    public void ClearRendererCandidateCount(Renderer renderer)
+    {
+        var entry = rendererCounts.Find(x => x != null && x.renderer == renderer);
+        if (entry != null) entry.overrideCount = false;
+    }
+
+    private int RendererCountsHash()
+    {
+        unchecked
+        {
+            int hash = 17;
+            foreach (var entry in rendererCounts)
+            {
+                if (entry == null || entry.renderer == null || !entry.overrideCount) continue;
+                hash = hash * 31 + entry.renderer.GetInstanceID();
+                hash = hash * 31 + Mathf.Max(0, entry.count);
+                hash = hash * 31 + entry.seedKey;
+            }
+            return hash;
+        }
     }
 
     [Header("Surface and distribution")]
@@ -127,6 +247,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public int NoiseId, MaskId;
         public Vector2 Tiling, Offset;
         public float Threshold, Softness;
+        public bool PreferSilhouette;
     }
 
     private sealed class SurfaceSource
@@ -140,6 +261,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public int[] Triangles;
         public double[] TriangleAreaCdf;
         public double TotalArea;
+        public int CandidateCount;
         public readonly List<Vector3> CurrentVertices = new List<Vector3>();
         public readonly List<Vector3> CurrentNormals = new List<Vector3>();
         public bool GeneratedRestNormals;
@@ -159,6 +281,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public float rotation;
         public float offsetRandom;
         public float brightness;
+        public int stableKey;
     }
 
     private void OnEnable()
@@ -259,7 +382,8 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             return;
 
         EnsureNoiseTexture();
-        bool rebuiltCandidates = seed != builtSeed || candidateCount != builtCandidateCount;
+        bool rebuiltCandidates = seed != builtSeed || candidateCount != builtCandidateCount ||
+            builtRendererCountsHash != RendererCountsHash();
         if (rebuiltCandidates)
         {
             BuildCandidates();
@@ -348,10 +472,11 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         if (targetRenderers == null)
             return;
 
+        var uniqueTargets = new HashSet<Renderer>();
         for (int r = 0; r < targetRenderers.Length; r++)
         {
             Renderer target = targetRenderers[r];
-            if (target == null || target is ParticleSystemRenderer)
+            if (target == null || target is ParticleSystemRenderer || !uniqueTargets.Add(target))
                 continue;
 
             Mesh mesh = null;
@@ -464,6 +589,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
     private void BuildCandidates()
     {
         builtSeed = seed;
+        builtRendererCountsHash = RendererCountsHash();
         builtCandidateCount = Mathf.Max(1, candidateCount);
         candidateCount = builtCandidateCount;
         candidates = new Candidate[builtCandidateCount];
@@ -473,6 +599,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 
         if (totalArea <= 0.0)
         {
+            candidates = Array.Empty<Candidate>();
             Debug.LogWarning("Surface Noise Particle Effect: no valid mesh surfaces were found.", this);
             return;
         }
@@ -490,37 +617,64 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         {
             double sourceSample = random.NextDouble() * totalArea;
             int sourceIndex = FindCdfIndex(sourceCdf, sourceSample);
-            SurfaceSource source = sources[sourceIndex];
-            int triangleIndex = FindCdfIndex(source.TriangleAreaCdf,
-                random.NextDouble() * source.TotalArea);
-            int triangleOffset = triangleIndex * 3;
-
-            double root = Math.Sqrt(random.NextDouble());
-            float r1 = (float)random.NextDouble();
-            float b0 = 1f - (float)root;
-            float b1 = (float)root * (1f - r1);
-            float b2 = (float)root * r1;
-
-            int i0 = source.Triangles[triangleOffset];
-            int i1 = source.Triangles[triangleOffset + 1];
-            int i2 = source.Triangles[triangleOffset + 2];
-            Vector2 uv = source.UVs[i0] * b0 + source.UVs[i1] * b1 + source.UVs[i2] * b2;
-
-            candidates[i] = new Candidate
-            {
-                sourceIndex = sourceIndex,
-                i0 = i0,
-                i1 = i1,
-                i2 = i2,
-                barycentric = new Vector3(b0, b1, b2),
-                uv = uv,
-                keepRandom = (float)random.NextDouble(),
-                sizeRandom = (float)random.NextDouble(),
-                rotation = (float)random.NextDouble() * 360f,
-                offsetRandom = (float)random.NextDouble(),
-                brightness = Mathf.Lerp(0.78f, 1f, (float)random.NextDouble())
-            };
+            candidates[i] = SampleCandidate(random, sourceIndex, i);
         }
+        var bySource = new List<Candidate>[sources.Count];
+        for (int i = 0; i < bySource.Length; i++) bySource[i] = new List<Candidate>();
+        foreach (var candidate in candidates) bySource[candidate.sourceIndex].Add(candidate);
+        var result = new List<Candidate>();
+        for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+        {
+            var source = sources[sourceIndex];
+            var entry = rendererCounts.Find(x => x != null && x.renderer == source.Renderer && x.overrideCount);
+            if (entry != null)
+            {
+                bySource[sourceIndex].Clear();
+                var sourceRandom = new System.Random(unchecked(seed ^ (entry.seedKey * 486187739)));
+                for (int i = 0; i < Mathf.Max(0, entry.count); i++)
+                    bySource[sourceIndex].Add(SampleCandidate(sourceRandom, sourceIndex,
+                        unchecked(entry.seedKey * 486187739 ^ i * 16777619)));
+            }
+            source.CandidateCount = bySource[sourceIndex].Count;
+            result.AddRange(bySource[sourceIndex]);
+        }
+        candidates = result.ToArray();
+        builtRendererCountsHash = RendererCountsHash();
+    }
+
+    private Candidate SampleCandidate(System.Random random, int sourceIndex, int stableKey)
+    {
+        SurfaceSource source = sources[sourceIndex];
+        int triangleIndex = FindCdfIndex(source.TriangleAreaCdf,
+            random.NextDouble() * source.TotalArea);
+        int triangleOffset = triangleIndex * 3;
+
+        double root = Math.Sqrt(random.NextDouble());
+        float r1 = (float)random.NextDouble();
+        float b0 = 1f - (float)root;
+        float b1 = (float)root * (1f - r1);
+        float b2 = (float)root * r1;
+
+        int i0 = source.Triangles[triangleOffset];
+        int i1 = source.Triangles[triangleOffset + 1];
+        int i2 = source.Triangles[triangleOffset + 2];
+        Vector2 uv = source.UVs[i0] * b0 + source.UVs[i1] * b1 + source.UVs[i2] * b2;
+
+        return new Candidate
+        {
+            sourceIndex = sourceIndex,
+            i0 = i0,
+            i1 = i1,
+            i2 = i2,
+            barycentric = new Vector3(b0, b1, b2),
+            uv = uv,
+            keepRandom = (float)random.NextDouble(),
+            sizeRandom = (float)random.NextDouble(),
+            rotation = (float)random.NextDouble() * 360f,
+            offsetRandom = (float)random.NextDouble(),
+            brightness = Mathf.Lerp(0.78f, 1f, (float)random.NextDouble()),
+            stableKey = stableKey
+        };
     }
 
     private static int FindCdfIndex(double[] cdf, double value)
@@ -570,6 +724,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             data.Offset = layer.noiseOffset;
             data.Threshold = layer.threshold;
             data.Softness = layer.softness;
+            data.PreferSilhouette = layer.preferSilhouetteDistribution;
         }
     }
 
@@ -585,7 +740,8 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             int maskId = layer.regionMask != null ? layer.regionMask.GetInstanceID() : 0;
             if (noiseId != data.NoiseId || maskId != data.MaskId || layer.noiseTiling != data.Tiling ||
                 layer.noiseOffset != data.Offset || !Mathf.Approximately(layer.threshold, data.Threshold) ||
-                !Mathf.Approximately(layer.softness, data.Softness)) return true;
+                !Mathf.Approximately(layer.softness, data.Softness) ||
+                layer.preferSilhouetteDistribution != data.PreferSilhouette) return true;
         }
         return false;
     }
@@ -602,26 +758,43 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             for (int i = 0; i < anchors.Length; i++) anchors[i] = new List<SurfaceNoiseGpu.Anchor>();
             if (layer != null && layer.enabled)
             {
-                float lower = Mathf.Clamp01(layer.threshold - layer.softness);
-                float upper = Mathf.Clamp01(layer.threshold + layer.softness);
-                bool hardThreshold = layer.softness <= 1e-5f;
-                foreach (Candidate c in candidates)
+                for (int candidateIndex = 0; candidateIndex < candidates.Length; candidateIndex++)
                 {
-                    float noise = SampleTexture(data.NoisePixels, data.NoiseWidth, data.NoiseHeight,
-                        Vector2.Scale(c.uv, layer.noiseTiling) + layer.noiseOffset);
-                    float probability = hardThreshold
-                        ? (noise >= layer.threshold ? 1f : 0f)
-                        : SmoothStep(lower, upper, noise);
-                    if (data.MaskPixels != null)
-                        probability *= SampleTexture(data.MaskPixels, data.MaskWidth, data.MaskHeight, c.uv);
-                    if (c.keepRandom >= probability || c.sourceIndex < 0 || c.sourceIndex >= sources.Count)
-                        continue;
-                    anchors[c.sourceIndex].Add(new SurfaceNoiseGpu.Anchor
+                    Candidate c = candidates[candidateIndex];
+                    if (c.sourceIndex < 0 || c.sourceIndex >= sources.Count ||
+                        c.keepRandom >= SelectionProbability(c.uv, layer, data)) continue;
+                    var output = anchors[c.sourceIndex];
+                    // Each particle owns a separate deterministic pool. Changing the
+                    // threshold cannot change another particle's random sequence.
+                    var random = new System.Random(unchecked(seed ^ (c.stableKey * 747796405) ^ 0x51ED270B));
+                    SurfaceNoiseGpu.Anchor original = ToAnchor(c);
+                    original.padding.x = (float)random.NextDouble();
+                    output.Add(original);
+                    if (!layer.preferSilhouetteDistribution) continue;
+                    SurfaceSource source = sources[c.sourceIndex];
+                    for (int slot = 1; slot < SurfaceNoiseGpu.DistributionChoices; slot++)
                     {
-                        i0 = (uint)c.i0, i1 = (uint)c.i1, i2 = (uint)c.i2,
-                        barycentric = c.barycentric, brightness = c.brightness,
-                        sizeRandom = c.sizeRandom, offsetRandom = c.offsetRandom
-                    });
+                        SurfaceNoiseGpu.Anchor alternative = original;
+                        // A failed search is invalid, not another vote for the original.
+                        alternative.padding.x = -1f;
+                        for (int attempt = 0; attempt < 16; attempt++)
+                        {
+                            int triangle = FindCdfIndex(source.TriangleAreaCdf,
+                                random.NextDouble() * source.TotalArea) * 3;
+                            int i0 = source.Triangles[triangle], i1 = source.Triangles[triangle + 1],
+                                i2 = source.Triangles[triangle + 2];
+                            float root = Mathf.Sqrt((float)random.NextDouble());
+                            float split = (float)random.NextDouble();
+                            Vector3 bary = new Vector3(1f - root, root * (1f - split), root * split);
+                            Vector2 uv = source.UVs[i0] * bary.x + source.UVs[i1] * bary.y + source.UVs[i2] * bary.z;
+                            if (random.NextDouble() >= SelectionProbability(uv, layer, data)) continue;
+                            alternative.i0 = (uint)i0; alternative.i1 = (uint)i1; alternative.i2 = (uint)i2;
+                            alternative.barycentric = bary;
+                            alternative.padding.x = (float)random.NextDouble();
+                            break;
+                        }
+                        output.Add(alternative);
+                    }
                 }
             }
             for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
@@ -630,11 +803,36 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
                 if (source.Batches == null || source.Batches.Length != layers.Length)
                     source.Batches = new SurfaceNoiseGpu.Batch[layers.Length];
                 Material material = layer != null ? layer.particleMaterial : null;
-                source.Batches[layerIndex] = gpu.AddBatch(material, anchors[sourceIndex], source.CurrentVertices.Count, layerIndex);
+                source.Batches[layerIndex] = gpu.AddBatch(material, anchors[sourceIndex], source.CurrentVertices.Count, layerIndex,
+                    layer != null && layer.preferSilhouetteDistribution ? SurfaceNoiseGpu.DistributionChoices : 1);
             }
         }
+        // Once independent budgets are used, anchors must not migrate to another
+        // renderer: a shared layer pool would invalidate actual per-renderer counts.
+        bool independentCounts = sources.Exists(source => rendererCounts.Exists(entry =>
+            entry != null && entry.renderer == source.Renderer && entry.overrideCount));
+        gpu.FinalizeBatches(independentCounts);
         PrepareTextureData();
     }
+
+    private float SelectionProbability(Vector2 uv, LayerSettings layer, LayerTextureData data)
+    {
+        float noise = SampleTexture(data.NoisePixels, data.NoiseWidth, data.NoiseHeight,
+            Vector2.Scale(uv, layer.noiseTiling) + layer.noiseOffset);
+        float probability = layer.softness <= 1e-5f ? (noise >= layer.threshold ? 1f : 0f)
+            : SmoothStep(Mathf.Clamp01(layer.threshold - layer.softness),
+                Mathf.Clamp01(layer.threshold + layer.softness), noise);
+        if (data.MaskPixels != null)
+            probability *= SampleTexture(data.MaskPixels, data.MaskWidth, data.MaskHeight, uv);
+        return probability;
+    }
+
+    private static SurfaceNoiseGpu.Anchor ToAnchor(Candidate c) => new SurfaceNoiseGpu.Anchor
+    {
+        i0 = (uint)c.i0, i1 = (uint)c.i1, i2 = (uint)c.i2,
+        barycentric = c.barycentric, brightness = c.brightness,
+        sizeRandom = c.sizeRandom, offsetRandom = c.offsetRandom
+    };
 
     private static float SmoothStep(float a, float b, float value)
     {
@@ -680,7 +878,11 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
             if (source.Batches == null) continue;
             bool visible = source.Renderer != null && source.Renderer.enabled &&
                 source.Renderer.gameObject.activeInHierarchy;
-            if (!visible) continue;
+            if (!visible)
+            {
+                foreach (var batch in source.Batches) if (batch != null) batch.visible = false;
+                continue;
+            }
             if (source.SkinnedRenderer != null && source.BakedMesh != null)
             {
                 source.SkinnedRenderer.BakeMesh(source.BakedMesh, true);

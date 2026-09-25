@@ -71,13 +71,15 @@ Shader "Custom/Character Noise Billboard"
                 float4 color;
                 float4 normalWS;
                 float4 surfacePosition;
+                float4 distributionNormal;
             };
             StructuredBuffer<SurfaceParticle> _SurfaceParticles;
+            #include "SurfaceNoiseDistribution.hlsl"
 
             Varyings Vert(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
             {
                 Varyings output = (Varyings)0;
-                SurfaceParticle p = _SurfaceParticles[instanceID];
+                SurfaceParticle p = SelectSurfaceDistributionParticle(instanceID);
                 const float2 corners[6] = {
                     float2(-0.5,-0.5), float2(-0.5,0.5), float2(0.5,0.5),
                     float2(-0.5,-0.5), float2(0.5,0.5), float2(0.5,-0.5)

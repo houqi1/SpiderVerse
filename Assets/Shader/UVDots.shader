@@ -18,9 +18,11 @@ Shader "Custom/UVDots"
         [Toggle] _InvertDots ("Invert Dots", Float) = 0
         _NoiseMap ("Noise", 2D) = "gray" {}
         _NoiseThreshold ("Dissolve", Range(0, 1)) = 0
-        _DissolveEdgeSoftness ("Dissolve Edge Softness", Range(0, 0.5)) = 0.05
+        [ToggleUI] _UseRadialDissolve ("Use Radial Dissolve", Float) = 1
+        _DissolveEdgeSoftness ("Dissolve Edge Softness", Range(0, 2)) = 0.05
         _ParticleDissolveVariation ("Per-Particle Dissolve Variation", Range(0, 1)) = 0.25
         _DissolveIrregularity ("Dissolve Irregularity", Range(0, 1)) = 0.65
+        [ToggleUI] _DisableDepthFade ("Disable Depth Fade", Float) = 0
         _DepthFade ("Depth Fade", Float) = 1
         [HideInInspector] _SurfaceCameraPosition ("Surface Camera Position", Vector) = (0, 0, 0, 1)
         [HideInInspector] _SurfaceCameraForward ("Surface Camera Forward", Vector) = (0, 0, 1, 0)
@@ -84,9 +86,11 @@ Shader "Custom/UVDots"
                 half _InvertDots;
                 float4 _NoiseMap_ST;
                 half _NoiseThreshold;
+                float _UseRadialDissolve;
                 float _DissolveEdgeSoftness;
                 half _ParticleDissolveVariation;
                 half _DissolveIrregularity;
+                float _DisableDepthFade;
                 float _DepthFade;
                 float4 _SurfaceCameraPosition;
                 float4 _SurfaceCameraForward;
@@ -131,13 +135,15 @@ Shader "Custom/UVDots"
                     _DotTexture, sampler_DotTexture, TRANSFORM_TEX(uv, _DotTexture)).r;
                 // White texels keep particles; black texels remove them. Grays stay antialiased.
                 float mask = lerp(proceduralMask, textureMask, step(0.5, _UseDotTexture));
-                // Procedural dots dissolve per cell. A custom texture dissolves as one
-                // continuous particle mask, from its outside edge toward the center.
+                // Procedural dots dissolve per cell; texture masks dissolve continuously.
+                // Optional radial shaping makes the dissolve progress from outside inward.
                 float2 cellCenter = (floor(uv * density) + 0.5) / density;
                 float2 dissolveUV = lerp(cellCenter, uv, step(0.5, _UseDotTexture));
                 float radial = saturate(length((dissolveUV - 0.5) * 2.0));
                 float noise = SampleParticleNoise(dissolveUV, particleSeed);
-                float field = (1.0 - radial) + (noise - 0.5) * _DissolveIrregularity;
+                float field = noise;
+                if (_UseRadialDissolve > 0.5)
+                    field = (1.0 - radial) + (noise - 0.5) * _DissolveIrregularity;
                 float perParticleThreshold = _NoiseThreshold +
                     (particleSeed - 0.5) * _ParticleDissolveVariation;
                 float edgeWidth = max(_DissolveEdgeSoftness, fwidth(field));
@@ -159,12 +165,14 @@ Shader "Custom/UVDots"
                 float4 color;
                 float4 normalWS;
                 float4 surfacePosition;
+                float4 distributionNormal;
             };
             StructuredBuffer<SurfaceParticle> _SurfaceParticles;
+            #include "SurfaceNoiseDistribution.hlsl"
             Varyings Vert(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
             {
                 Varyings output = (Varyings)0;
-                SurfaceParticle p = _SurfaceParticles[instanceID];
+                SurfaceParticle p = SelectSurfaceDistributionParticle(instanceID);
                 const float2 corners[6] = {
                     float2(-0.5,-0.5), float2(-0.5,0.5), float2(0.5,0.5),
                     float2(-0.5,-0.5), float2(0.5,0.5), float2(0.5,-0.5)
@@ -235,7 +243,9 @@ Shader "Custom/UVDots"
                 float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS.xy);
                 float sceneEye = SurfaceParticleEyeDepth(SampleSceneDepth(screenUV));
                 float selfEye = SurfaceParticleEyeDepth(input.positionCS.z);
-                float fade = saturate((sceneEye - selfEye) / max(_DepthFade, 1e-4));
+                float fade = 1.0;
+                if (_DisableDepthFade < 0.5)
+                    fade = saturate((sceneEye - selfEye) / max(_DepthFade, 1e-4));
                 half3 particleColor = _BaseColor.rgb;
                 half colorVisibility = 1.0h;
 #if defined(SURFACE_NOISE_GPU)

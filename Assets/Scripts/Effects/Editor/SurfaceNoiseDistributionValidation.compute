@@ -1,0 +1,21 @@
+#pragma kernel Validate
+struct SurfaceParticle
+{
+    float4 positionSize;
+    float4 color;
+    float4 normalWS;
+    float4 surfacePosition;
+    float4 distributionNormal;
+};
+float3 SafeNormalize(float3 v) { return v * rsqrt(max(dot(v, v), 1e-20)); }
+StructuredBuffer<SurfaceParticle> _SurfaceParticles;
+#include "../../../Shader/SurfaceNoiseDistribution.hlsl"
+RWStructuredBuffer<uint> _Selected;
+uint _Count;
+float4 _TestCameraPosition, _TestCameraForward;
+[numthreads(64, 1, 1)]
+void Validate(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Count) return;
+    _Selected[id.x] = SelectSurfaceDistributionIndex(id.x);
+}

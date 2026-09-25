@@ -1,4 +1,6 @@
 #pragma kernel UpdateAnchors
+#pragma kernel BuildDistributionWeights
+#pragma kernel ScanDistributionWeights
 
 struct Anchor
 {
@@ -15,12 +17,14 @@ struct Particle
     float4 color;
     float4 normalWS;
     float4 surfacePosition;
+    float4 distributionNormal;
 };
 StructuredBuffer<float3> _Vertices;
 StructuredBuffer<float3> _Normals;
 StructuredBuffer<Anchor> _Anchors;
 RWStructuredBuffer<Particle> _SurfaceParticles;
 uint _AnchorCount;
+uint _AnchorOffset;
 float4x4 _LocalToWorld;
 float4x4 _NormalToWorld;
 float4 _SizeOffset;
@@ -45,7 +49,52 @@ void UpdateAnchors(uint3 threadID : SV_DispatchThreadID)
     Particle particle;
     particle.positionSize = float4(p, max(0, lerp(_SizeOffset.x, _SizeOffset.y, a.sizeRandom)));
     particle.color = _ParticleColor * a.brightness;
-    particle.normalWS = float4(n, 0);
+    // Spare component carries an independent stable distribution draw.
+    particle.normalWS = float4(n, a.padding.x);
     particle.surfacePosition = float4(surfacePositionWS, 1);
-    _SurfaceParticles[id] = particle;
+    float3 edge1 = mul((float3x3)_LocalToWorld, _Vertices[a.indices.y] - _Vertices[a.indices.x]);
+    float3 edge2 = mul((float3x3)_LocalToWorld, _Vertices[a.indices.z] - _Vertices[a.indices.x]);
+    float3 faceNormal = cross(edge1, edge2);
+    float lengthSq = dot(faceNormal, faceNormal);
+    particle.distributionNormal = float4(faceNormal * rsqrt(max(lengthSq, 1e-20)),
+        a.padding.x >= 0 && lengthSq > 1e-20 ? 1 : 0);
+    _SurfaceParticles[_AnchorOffset + id] = particle;
+}
+
+// All meshes in a layer share a weight CDF. Local pools must not fall back to
+// front-facing anchors when another mesh/particle provides a valid side sample.
+RWStructuredBuffer<uint> _DistributionWrite;
+StructuredBuffer<uint> _DistributionRead;
+uint _DistributionSampleCount, _ScanStep;
+float4 _DistributionCameraPosition, _DistributionCameraForward;
+float4 _DistributionSettings; // front weight, width, source visible
+
+[numthreads(64, 1, 1)]
+void BuildDistributionWeights(uint3 threadID : SV_DispatchThreadID)
+{
+    uint local = threadID.x;
+    if (local >= _AnchorCount) return;
+    uint id = _AnchorOffset + local;
+    Particle p = _SurfaceParticles[id];
+    float3 view = _DistributionCameraForward.w > 0.5 ? -_DistributionCameraForward.xyz
+        : _DistributionCameraPosition.xyz - p.surfacePosition.xyz;
+    view *= rsqrt(max(dot(view, view), 1e-20));
+    float facing = saturate(abs(dot(p.distributionNormal.xyz, view)));
+    float edge = 1.0 - smoothstep(0.0, max(0.01, _DistributionSettings.y), facing);
+    float weight = p.distributionNormal.w * _DistributionSettings.z
+        * lerp(saturate(_DistributionSettings.x), 1.0, edge);
+    // Integer prefix sums keep zero-weight plateaus exactly flat. Floating-point
+    // scan rounding can otherwise give a front-facing candidate a tiny interval.
+    uint scale = min(65535u, 2147483647u / max(1u, _DistributionSampleCount));
+    _DistributionWrite[id] = weight > 0 ? max(1u, (uint)round(weight * scale)) : 0u;
+}
+
+[numthreads(64, 1, 1)]
+void ScanDistributionWeights(uint3 threadID : SV_DispatchThreadID)
+{
+    uint id = threadID.x;
+    if (id >= _DistributionSampleCount) return;
+    uint value = _DistributionRead[id];
+    if (id >= _ScanStep) value += _DistributionRead[id - _ScanStep];
+    _DistributionWrite[id] = value;
 }
