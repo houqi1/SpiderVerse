@@ -1,0 +1,10 @@
+#pragma kernel CopySeeds
+Texture2D<uint2> _Seeds;
+RWStructuredBuffer<uint2> _Result;
+int2 _Size;
+[numthreads(8, 8, 1)]
+void CopySeeds(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= (uint2)_Size)) return;
+    _Result[id.y * _Size.x + id.x] = _Seeds.Load(int3(id.xy, 0));
+}

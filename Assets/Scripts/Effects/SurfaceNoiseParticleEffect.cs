@@ -83,6 +83,20 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
     [SerializeField] private LayerSettings[] layers = Array.Empty<LayerSettings>();
     [SerializeField, HideInInspector] private int layerSettingsVersion;
 
+    [Header("Screen-space particle color (Jump Flood)")]
+    [Tooltip("Extend this character's visible colors across each particle pixel. Disable to compare with anchor sampling.")]
+    public bool useJumpFloodColor = true;
+    [Range(8, 256), Tooltip("Maximum color extension in camera render pixels, including the safe inner edge.")]
+    public int colorExtensionPixels = 128;
+    [Tooltip("Half-size coordinate field; the source color and visibility mask remain full resolution.")]
+    public bool halfResolutionColorField = true;
+
+    internal Renderer[] ColorSourceRenderers => targetRenderers;
+    internal bool NeedsColorField => useJumpFloodColor && isActiveAndEnabled && SubmittedParticleCount > 0 &&
+        Array.Exists(layers, layer => layer != null && layer.enabled && layer.particleMaterial != null &&
+            layer.particleMaterial.HasProperty("_UseSampledSurfaceColor") &&
+            layer.particleMaterial.GetFloat("_UseSampledSurfaceColor") > 0.5f);
+
     [Header("GPU anchor update")]
     [SerializeField] private ComputeShader anchorCompute;
     [SerializeField, Tooltip("Legacy reference retained for migration. This system is stopped; GPU billboards render the effect.")]

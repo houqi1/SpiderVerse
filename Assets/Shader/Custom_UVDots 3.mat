@@ -27,11 +27,11 @@ Material:
     m_TexEnvs:
     - _DotTexture:
         m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
-        m_Scale: {x: 0.1, y: 0.1}
+        m_Scale: {x: 0.5, y: 0.5}
         m_Offset: {x: 0, y: 0}
     - _NoiseMap:
         m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
-        m_Scale: {x: 1, y: 1}
+        m_Scale: {x: 0.5, y: 0.5}
         m_Offset: {x: 0, y: 0}
     - _SurfaceSourceColor:
         m_Texture: {fileID: 0}
@@ -39,22 +39,25 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _AnchorOpacityFalloffEnd: 1
+    - _AnchorCenterOpacity: 1
+    - _AnchorOpacityFalloffEnd: 0.221
     - _AnchorOpacityFalloffStart: 0
-    - _ColorSampleNormalOffset: -0.01
+    - _ColorSampleNormalOffset: 0
     - _Cull: 2
-    - _DepthFade: 0.05
-    - _DissolveEdgeSoftness: 0.05
+    - _DepthFade: -0.14
+    - _DissolveEdgeSoftness: 0.5
     - _DissolveIrregularity: 0.895
     - _DotDensity: 87.77
     - _DotSize: 0.001
     - _InvertDots: 0
-    - _NoiseThreshold: 0.681
+    - _NoiseThreshold: 0.941
     - _Opacity: 1
-    - _ParticleDissolveVariation: 0.58
+    - _OpacityAdd: 0.534
+    - _ParticleDissolveVariation: 1
     - _UseAnchorOpacityFalloff: 0
     - _UseDotTexture: 1
     - _UseSampledSurfaceColor: 1
+    - _ZTest: 4
     m_Colors:
     - _BaseColor: {r: 3.0314326, g: 0, b: 0.97101015, a: 1}
     - _SurfaceCameraForward: {r: 0, g: 0, b: 1, a: 0}

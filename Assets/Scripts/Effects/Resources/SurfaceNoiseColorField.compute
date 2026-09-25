@@ -1,0 +1,79 @@
+#pragma kernel Initialize
+#pragma kernel JumpFlood
+
+Texture2D<float> _Mask;
+Texture2D<uint2> _SeedsRead;
+RWTexture2D<uint2> _SeedsWrite;
+int2 _FullSize;
+int2 _FieldSize;
+int2 _Origin;
+int _Downsample;
+int _Jump;
+
+bool Reliable(int2 p)
+{
+    if (any(p < 1) || any(p >= _FullSize - 1)) return false;
+    float depth = _Mask.Load(int3(p, 0));
+    if (depth <= 0) return false;
+    // Keep the source one full-resolution pixel inside the visible silhouette.
+    // Also reject depth discontinuities so filtering cannot borrow an occluder.
+    float tolerance = max(0.003, depth * 0.01);
+    [unroll] for (int y = -1; y <= 1; y++)
+    [unroll] for (int x = -1; x <= 1; x++)
+    {
+        float other = _Mask.Load(int3(p + int2(x, y), 0));
+        if (other <= 0 || abs(other - depth) > tolerance) return false;
+    }
+    return true;
+}
+
+[numthreads(8, 8, 1)]
+void Initialize(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= (uint2)_FieldSize)) return;
+    int2 basePixel = _Origin + int2(id.xy) * _Downsample;
+    float2 center = basePixel + 0.5 * (_Downsample - 1);
+    uint2 best = 0;
+    float bestDistance = 1e20;
+    for (int y = 0; y < _Downsample; y++)
+    for (int x = 0; x < _Downsample; x++)
+    {
+        int2 p = basePixel + int2(x, y);
+        if (!Reliable(p)) continue;
+        float2 delta = p - center;
+        float distance = dot(delta, delta);
+        if (distance < bestDistance)
+        {
+            bestDistance = distance;
+            best = (uint2)p + 1; // zero is invalid, including at the screen origin
+        }
+    }
+    _SeedsWrite[id.xy] = best;
+}
+
+[numthreads(8, 8, 1)]
+void JumpFlood(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= (uint2)_FieldSize)) return;
+    float2 pixel = _Origin + float2(id.xy) * _Downsample + 0.5 * (_Downsample - 1);
+    uint2 best = 0;
+    float bestDistance = 1e20;
+    [unroll] for (int y = -1; y <= 1; y++)
+    [unroll] for (int x = -1; x <= 1; x++)
+    {
+        int2 q = int2(id.xy) + int2(x, y) * _Jump;
+        if (any(q < 0) || any(q >= _FieldSize)) continue;
+        uint2 seed = _SeedsRead.Load(int3(q, 0));
+        if (any(seed == 0)) continue;
+        float2 delta = float2(seed - 1) - pixel;
+        float distance = dot(delta, delta);
+        // Deterministic tie-break avoids equal-distance sources flickering.
+        bool tie = distance == bestDistance && (seed.y < best.y || (seed.y == best.y && seed.x < best.x));
+        if (distance < bestDistance || tie)
+        {
+            best = seed;
+            bestDistance = distance;
+        }
+    }
+    _SeedsWrite[id.xy] = best;
+}

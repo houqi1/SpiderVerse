@@ -149,7 +149,7 @@ namespace SpiderVerse.LineArt
             if(ObjectLineArtSource.Active.Count==0)return;
             if(pass!=null)renderer.EnqueuePass(pass);
         }
-        protected override void Dispose(bool disposing) {pass?.Dispose();pass=null;surfaceNoisePass=null;}
+        protected override void Dispose(bool disposing) {pass?.Dispose();pass=null;surfaceNoisePass?.Dispose();surfaceNoisePass=null;}
 
         sealed class SurfaceNoisePass : ScriptableRenderPass
         {
@@ -165,6 +165,9 @@ namespace SpiderVerse.LineArt
             }
 
             readonly ObjectLineArtFeature owner;
+            readonly SurfaceNoiseColorField colorField = new SurfaceNoiseColorField();
+
+            public void Dispose() => colorField.Dispose();
 
             public SurfaceNoisePass(ObjectLineArtFeature owner)
             {
@@ -186,6 +189,8 @@ namespace SpiderVerse.LineArt
                 if(!owner.TryGetLineArtCameraSample(camera,out sample))
                     sample=new CameraSample{position=camera.transform.position,forward=camera.transform.forward,orthographic=camera.orthographic};
 
+                if(colorField.Record(graph,cameraData,resources,SurfaceNoiseParticleEffect.ActiveEffects.ToArray(),sample))return;
+
                 using(var builder=graph.AddUnsafePass<PassData>("Surface Noise · color matched particles",out var data))
                 {
                     data.camera=camera;
@@ -197,13 +202,14 @@ namespace SpiderVerse.LineArt
                     data.cameraDepth=resources.cameraDepthTexture;
                     builder.UseTexture(data.opaqueColor,AccessFlags.Read);
                     builder.UseTexture(data.color,AccessFlags.ReadWrite);
-                    builder.UseTexture(data.depth,AccessFlags.Read);
+                    builder.UseTexture(data.depth,AccessFlags.ReadWrite);
                     builder.UseTexture(data.cameraDepth,AccessFlags.Read);
                     builder.AllowPassCulling(false);
                     builder.SetRenderFunc((PassData d,UnsafeGraphContext context)=>
                     {
                         context.cmd.SetRenderTarget(d.color,d.depth);
                         var commandBuffer=CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
+                        commandBuffer.SetGlobalFloat("_SurfaceColorFieldEnabled",0);
                         for(int i=0;i<d.effects.Length;i++)
                         {
                             var effect=d.effects[i];

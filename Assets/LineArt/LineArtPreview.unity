@@ -9517,18 +9517,21 @@ MonoBehaviour:
     regionMask: {fileID: 0}
     noiseTiling: {x: 1, y: -0.18}
     noiseOffset: {x: -0.56, y: 1.75}
-    threshold: 0.55
+    threshold: 0
     softness: 0.365
     particleMaterial: {fileID: 2100000, guid: 6c27c4c30f717b54b9cb37d98a5b8a1a, type: 2}
     particleColor: {r: 0.82, g: 0.93, b: 1, a: 1}
-    particleSize: {x: 0.03, y: 0.1}
-    surfaceOffset: 0
-    surfaceOffsetJitter: 0
+    particleSize: {x: 0.07, y: 0.05}
+    surfaceOffset: -0.0024
+    surfaceOffsetJitter: -0.0008
     cameraViewEffectEnabled: 0
     cameraFacingStrength: 1
     cameraFacingSoftness: 0.01
     cameraSilhouetteSizeBoost: 0
   layerSettingsVersion: 1
+  useJumpFloodColor: 1
+  colorExtensionPixels: 128
+  halfResolutionColorField: 1
   anchorCompute: {fileID: 7200000, guid: c5c03f1a39a752741b3fd6588f107c6d, type: 3}
   particleSystem: {fileID: 868734829}
 --- !u!1 &832575517
@@ -9647,7 +9650,7 @@ ParticleSystemRenderer:
   m_MeshDistribution: 0
   m_SortMode: 0
   m_MinParticleSize: 0
-  m_MaxParticleSize: 1
+  m_MaxParticleSize: 1000
   m_CameraVelocityScale: 0
   m_VelocityScale: 0
   m_LengthScale: 2
@@ -15226,6 +15229,9 @@ MonoBehaviour:
     cameraFacingSoftness: 0.15
     cameraSilhouetteSizeBoost: 0.35
   layerSettingsVersion: 1
+  useJumpFloodColor: 1
+  colorExtensionPixels: 128
+  halfResolutionColorField: 1
   anchorCompute: {fileID: 7200000, guid: c5c03f1a39a752741b3fd6588f107c6d, type: 3}
   particleSystem: {fileID: 868734829}
 --- !u!1 &1534938187

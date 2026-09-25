@@ -4,10 +4,12 @@ Shader "Custom/UVDots"
     {
         [MainColor][HDR] _BaseColor ("Tint", Color) = (1, 1, 1, 1)
         _Opacity ("Overall Opacity", Range(0, 1)) = 1
-        [Toggle] _UseAnchorOpacityFalloff ("Fade Opacity Outward From Anchor", Float) = 0
-        _AnchorOpacityFalloffStart ("Anchor Fade Start", Range(0, 1)) = 0
-        _AnchorOpacityFalloffEnd ("Anchor Fade End", Range(0.001, 1)) = 1
-        [Toggle] _UseSampledSurfaceColor ("Sample Surface Color At Anchor", Float) = 1
+        _OpacityAdd ("Opacity Add (Noise)", Range(0, 1)) = 0
+        [Toggle] _UseAnchorOpacityFalloff ("Blend Center Opacity To Dot Mask", Float) = 0
+        _AnchorCenterOpacity ("Center Opacity", Range(0, 1)) = 1
+        _AnchorOpacityFalloffStart ("Center UV Radius", Range(0, 1)) = 0
+        _AnchorOpacityFalloffEnd ("Texture Blend End UV Radius", Range(0.001, 1)) = 1
+        [Toggle] _UseSampledSurfaceColor ("Sample Character Color", Float) = 1
         _ColorSampleNormalOffset ("Color Sample Normal Offset (World Units)", Float) = 0
         _DotDensity ("Dot Density", Float) = 10
         _DotSize ("Dot Size", Range(0, 0.5)) = 0.03
@@ -25,6 +27,7 @@ Shader "Custom/UVDots"
         [HideInInspector] _SurfaceCameraInfluence ("Surface Camera Influence", Vector) = (0, 1, 0.15, 0.35)
 
         [Header(Surface)]
+        [Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Depth Test (ZTest)", Float) = 4
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull", Float) = 2
     }
 
@@ -43,6 +46,7 @@ Shader "Custom/UVDots"
             Tags { "LightMode" = "UniversalForward" }
 
             Cull [_Cull]
+            ZTest [_ZTest]
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
 
@@ -56,6 +60,7 @@ Shader "Custom/UVDots"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
+            #include "SurfaceNoiseColorSampling.hlsl"
 
             TEXTURE2D(_NoiseMap);
             SAMPLER(sampler_NoiseMap);
@@ -65,7 +70,9 @@ Shader "Custom/UVDots"
             CBUFFER_START(UnityPerMaterial)
                 half4 _BaseColor;
                 half _Opacity;
+                half _OpacityAdd;
                 float _UseAnchorOpacityFalloff;
+                float _AnchorCenterOpacity;
                 float _AnchorOpacityFalloffStart;
                 float _AnchorOpacityFalloffEnd;
                 float _UseSampledSurfaceColor;
@@ -104,8 +111,15 @@ Shader "Custom/UVDots"
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
+            float SampleParticleNoise(float2 uv, float particleSeed)
+            {
+                float2 noiseUV = uv * _NoiseMap_ST.xy + _NoiseMap_ST.zw +
+                    particleSeed * float2(19.19, 37.71);
+                return SAMPLE_TEXTURE2D(_NoiseMap, sampler_NoiseMap, noiseUV).r;
+            }
+
             // White dots on black, or the reverse. Density is dots per UV unit, size is radius in UV units.
-            float DotMask(float2 uv, float particleSeed)
+            void DotMask(float2 uv, float particleSeed, out float dotOpacity, out float dissolveFade)
             {
                 float density = max(_DotDensity, 1e-4);
                 float2 cell = frac(uv * density) - 0.5;
@@ -122,17 +136,20 @@ Shader "Custom/UVDots"
                 float2 cellCenter = (floor(uv * density) + 0.5) / density;
                 float2 dissolveUV = lerp(cellCenter, uv, step(0.5, _UseDotTexture));
                 float radial = saturate(length((dissolveUV - 0.5) * 2.0));
-                float2 noiseUV = dissolveUV * _NoiseMap_ST.xy + _NoiseMap_ST.zw +
-                    particleSeed * float2(19.19, 37.71);
-                float noise = SAMPLE_TEXTURE2D(_NoiseMap, sampler_NoiseMap, noiseUV).r;
+                float noise = SampleParticleNoise(dissolveUV, particleSeed);
                 float field = (1.0 - radial) + (noise - 0.5) * _DissolveIrregularity;
                 float perParticleThreshold = _NoiseThreshold +
                     (particleSeed - 0.5) * _ParticleDissolveVariation;
                 float edgeWidth = max(_DissolveEdgeSoftness, fwidth(field));
-                float dissolve = smoothstep(perParticleThreshold - edgeWidth,
+                dissolveFade = smoothstep(perParticleThreshold - edgeWidth,
                     perParticleThreshold + edgeWidth, field);
-                mask *= dissolve;
-                return _InvertDots > 0.5h ? 1.0 - mask : mask;
+                dotOpacity = mask;
+                if (_InvertDots > 0.5h)
+                {
+                    // Preserve inversion of the complete mask, including dissolution.
+                    dissolveFade = 1.0 - mask * dissolveFade;
+                    dotOpacity = 1.0;
+                }
             }
 
 #if defined(SURFACE_NOISE_GPU)
@@ -212,32 +229,48 @@ Shader "Custom/UVDots"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                half mask = DotMask(input.uv, input.particleSeed);
+                float dotOpacity, dissolveFade;
+                DotMask(input.uv, input.particleSeed, dotOpacity, dissolveFade);
+                float mask = dotOpacity * dissolveFade;
                 float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS.xy);
-                float sceneEye = LinearEyeDepth(SampleSceneDepth(screenUV), _ZBufferParams);
-                float selfEye = LinearEyeDepth(input.positionCS.z, _ZBufferParams);
+                float sceneEye = SurfaceParticleEyeDepth(SampleSceneDepth(screenUV));
+                float selfEye = SurfaceParticleEyeDepth(input.positionCS.z);
                 float fade = saturate((sceneEye - selfEye) / max(_DepthFade, 1e-4));
                 half3 particleColor = _BaseColor.rgb;
+                half colorVisibility = 1.0h;
 #if defined(SURFACE_NOISE_GPU)
                 if (_UseSampledSurfaceColor > 0.5)
                 {
-                    // Sample once per anchor; all texels on this billboard share its RGB.
-                    particleColor = SampleSceneColor(input.anchorScreenUV);
+                    if (_SurfaceColorFieldEnabled > 0.5)
+                        particleColor = SampleSurfaceColorField(input.positionCS.xy, sceneEye, colorVisibility);
+                    else
+                        particleColor = SampleSceneColor(input.anchorScreenUV);
                 }
 #endif
 
-                float opacityFalloff = 1.0;
+                float particleOpacity = dotOpacity;
                 if (_UseAnchorOpacityFalloff > 0.5)
                 {
-                    // UV (0.5, 0.5) is the billboard anchor; normalize radius so
-                    // the four corners reach 1 and opacity fades radially outward.
+                    // UV (0.5, 0.5) is the billboard anchor. Keep the requested
+                    // center opacity, then blend to the texture-driven dot mask.
                     float radius = saturate(length((input.uv - 0.5) * 1.41421356));
                     float fadeStart = min(saturate(_AnchorOpacityFalloffStart), 0.999);
                     float fadeEnd = max(saturate(_AnchorOpacityFalloffEnd), fadeStart + 1e-3);
-                    opacityFalloff = 1.0 - smoothstep(fadeStart, fadeEnd, radius);
+                    float textureBlend = smoothstep(fadeStart, fadeEnd, radius);
+                    particleOpacity = lerp(_AnchorCenterOpacity, dotOpacity, textureBlend);
                 }
 
-                half alpha = mask * _BaseColor.a * _Opacity * fade * input.viewInfluence * opacityFalloff;
+                // Sample before discard so texture derivatives remain available.
+                float opacityNoise = saturate(SampleParticleNoise(input.uv, input.particleSeed));
+
+                // Visibility is determined solely by the original dot/dissolve mask.
+                // Neither center opacity nor additive opacity can restore clipped texels.
+                // Discard only zero coverage. Apply the soft dissolve AFTER opacity
+                // adjustments so they cannot lift its zero-alpha boundary into a hard edge.
+                clip(mask > 0.0h ? 1.0h : -1.0h);
+                particleOpacity = saturate(particleOpacity + _OpacityAdd * opacityNoise);
+
+                half alpha = particleOpacity * dissolveFade * _BaseColor.a * _Opacity * fade * input.viewInfluence * colorVisibility;
                 return half4(particleColor, alpha);
             }
             ENDHLSL
