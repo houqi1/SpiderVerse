@@ -29,6 +29,12 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     NoisePass pass;
     int revision;
 
+    bool SceneDistortionEnabled => passMaterial != null && passMaterial.passCount >= 3 &&
+        passMaterial.HasProperty("_DistortionEnabled") && passMaterial.GetFloat("_DistortionEnabled") > 0.5f &&
+        Mathf.Abs(passMaterial.GetFloat("_DistortionPixels")) > 0.0001f &&
+        passMaterial.GetFloat("_DisplayMode") > 2.5f && passMaterial.GetFloat("_DisplayMode") < 3.5f &&
+        passMaterial.GetFloat("_NoiseOutputOnly") < 0.5f;
+
     public override void Create()
     {
         if (pass == null) pass = new NoisePass(this);
@@ -45,6 +51,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         if (cameraData.cameraType != CameraType.Game &&
             !(showInSceneView && cameraData.cameraType == CameraType.SceneView)) return;
         if (pass == null) Create();
+        pass.requiresIntermediateTexture = SceneDistortionEnabled;
         pass.PruneDestroyedCameras();
         renderer.EnqueuePass(pass);
     }
@@ -61,7 +68,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     sealed class CameraHistory
     {
         public Camera camera;
-        public RTHandle read, write, published;
+        public RTHandle read, write, published, sceneColorCopy;
         public readonly MotionDirectionUpdateClock clock = new MotionDirectionUpdateClock();
         public bool valid, synchronized, hasSample, wasPlaying;
         public int sampleSourceId;
@@ -76,6 +83,8 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         public void Dispose()
         {
             read?.Release(); write?.Release(); published?.Release();
+            sceneColorCopy?.Release();
+            sceneColorCopy = null;
             read = write = published = null;
             valid = false;
         }
@@ -99,7 +108,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         public NoisePass(MotionVectorNoiseFeature owner)
         {
             this.owner = owner;
-            renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing;
+            renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
             ConfigureInput(ScriptableRenderPassInput.Motion);
             profilingSampler = new ProfilingSampler("Motion Vector Noise");
         }
@@ -275,6 +284,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             public Material material;
             public MaterialPropertyBlock properties;
             public int passIndex;
+            public TextureHandle source;
         }
 
         sealed class CopyData { public TextureHandle source; }
@@ -321,6 +331,42 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                 }
             }
 
+            if (owner.SceneDistortionEnabled && !resources.isActiveTargetBackBuffer)
+            {
+                var sceneDesc = renderGraph.GetTextureDesc(resources.activeColorTexture);
+                sceneDesc.name = "Motion Distortion Scene Copy";
+                sceneDesc.clearBuffer = false;
+                sceneDesc.msaaSamples = MSAASamples.None;
+                sceneDesc.bindTextureMS = false;
+                sceneDesc.depthBufferBits = DepthBits.None;
+                var sceneCopy = renderGraph.CreateTexture(sceneDesc);
+                using (var builder = renderGraph.AddRasterRenderPass<CopyData>("Copy Scene For Motion Distortion", out var data))
+                {
+                    data.source = resources.activeColorTexture;
+                    builder.UseTexture(data.source, AccessFlags.Read);
+                    builder.SetRenderAttachment(sceneCopy, 0, AccessFlags.WriteAll);
+                    builder.SetRenderFunc((CopyData d, RasterGraphContext context) =>
+                        Blitter.BlitTexture(context.cmd, d.source, new Vector4(1, 1, 0, 0), 0, false));
+                }
+                using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Oriented Scene Distortion", out var data))
+                {
+                    data.material = owner.passMaterial;
+                    data.properties = Properties(plan, true);
+                    data.passIndex = 2;
+                    data.source = sceneCopy;
+                    builder.UseTexture(sceneCopy, AccessFlags.Read);
+                    builder.UseTexture(published, AccessFlags.Read);
+                    // The distortion replaces RGB and preserves destination alpha.
+                    builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
+                    builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
+                    {
+                        d.properties.SetTexture(BlitTexture, d.source);
+                        context.cmd.DrawProcedural(Matrix4x4.identity, d.material, d.passIndex,
+                            MeshTopology.Triangles, 3, 1, d.properties);
+                    });
+                }
+            }
+
             using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Vector Noise", out var data))
             {
                 data.material = owner.passMaterial;
@@ -356,7 +402,27 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                     var source = plan.publishPrevious ? plan.previous : plan.history.read;
                     Blitter.BlitTexture(cmd, source, new Vector4(1, 1, 0, 0), 0, false);
                 }
-                CoreUtils.SetRenderTarget(cmd, renderingData.cameraData.renderer.cameraColorTargetHandle);
+                var cameraColor = renderingData.cameraData.renderer.cameraColorTargetHandle;
+                if (owner.SceneDistortionEnabled)
+                {
+                    var descriptor = renderingData.cameraData.cameraTargetDescriptor;
+                    descriptor.depthBufferBits = 0;
+                    descriptor.depthStencilFormat = GraphicsFormat.None;
+                    descriptor.msaaSamples = 1;
+                    descriptor.bindMS = false;
+                    descriptor.useMipMap = false;
+                    descriptor.autoGenerateMips = false;
+                    descriptor.memoryless = RenderTextureMemoryless.None;
+                    RenderingUtils.ReAllocateHandleIfNeeded(ref plan.history.sceneColorCopy, descriptor,
+                        FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Motion Distortion Scene Copy");
+                    CoreUtils.SetRenderTarget(cmd, plan.history.sceneColorCopy);
+                    Blitter.BlitTexture(cmd, cameraColor, new Vector4(1, 1, 0, 0), 0, false);
+                    CoreUtils.SetRenderTarget(cmd, cameraColor);
+                    var properties = Properties(plan, true);
+                    properties.SetTexture(BlitTexture, plan.history.sceneColorCopy.rt);
+                    cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 2, MeshTopology.Triangles, 3, 1, properties);
+                }
+                CoreUtils.SetRenderTarget(cmd, cameraColor);
                 cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 0, MeshTopology.Triangles, 3, 1, Properties(plan, true));
                 context.ExecuteCommandBuffer(cmd);
             }

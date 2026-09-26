@@ -23,12 +23,19 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _DistortionMap:
+        m_Texture: {fileID: 2800000, guid: 235a32e059bf49da9523423d9b72b1fc, type: 3}
+        m_Scale: {x: 4, y: 4}
+        m_Offset: {x: 0, y: 0}
     - _NoiseMap:
         m_Texture: {fileID: 2800000, guid: de36ea0bd799b2041a048c03f642441b, type: 3}
         m_Scale: {x: 2, y: 2}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _DistortionEnabled: 1
+    - _DistortionPixels: 8
+    - _DistortionAngle: 0
     - _DisplayMode: 3
     - _MotionThreshold: 0.1
     - _NoiseAngle: 0

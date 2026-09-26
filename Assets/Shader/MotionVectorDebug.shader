@@ -12,6 +12,11 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         _NoiseContrast ("Noise Contrast", Range(0, 4)) = 1.5
         _NoiseAngle ("Noise Angle Offset (Degrees)", Range(-180, 180)) = 0
         _MotionThreshold ("Direction Threshold (Pixels Per Frame)", Range(0.001, 5)) = 0.1
+        [Header(Motion Oriented Scene Distortion)]
+        [ToggleUI] _DistortionEnabled ("Enable Scene Distortion", Float) = 1
+        _DistortionMap ("Distortion Strength Map (R)", 2D) = "gray" {}
+        _DistortionPixels ("Distortion Distance (Pixels)", Range(-64, 64)) = 8
+        _DistortionAngle ("Distortion Map Angle Offset (Degrees)", Range(-180, 180)) = 0
     }
 
     SubShader
@@ -25,6 +30,7 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         TEXTURE2D_X_FLOAT(_MotionVectorTexture);
         TEXTURE2D_X_FLOAT(_CachedMotionDirections);
         TEXTURE2D(_NoiseMap);
+        TEXTURE2D(_DistortionMap);
 
         CBUFFER_START(UnityPerMaterial)
             float _DisplayMode;
@@ -36,6 +42,10 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             float _NoiseAngle;
             float _MotionThreshold;
             float _NoiseOutputOnly;
+            float4 _DistortionMap_ST;
+            float _DistortionEnabled;
+            float _DistortionPixels;
+            float _DistortionAngle;
         CBUFFER_END
 
         // Per-camera values are supplied through property blocks, never a shared
@@ -45,6 +55,13 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         float _CacheTime;
         float _HoldLastDirection;
         float _ResetDirectionAfter;
+
+        float2 RotateNoiseUV(float2 position, float2 direction)
+        {
+            // Inverse sampling rotation: the texture's +X axis follows direction.
+            return float2(dot(position, direction),
+                          dot(position, float2(-direction.y, direction.x)));
+        }
         ENDHLSL
 
         Pass
@@ -62,14 +79,6 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             #pragma target 3.5
             #pragma vertex Vert
             #pragma fragment Frag
-
-            float2 RotateNoiseUV(float2 position, float2 direction)
-            {
-                // Inverse sampling rotation: the texture's +X axis points along
-                // direction in the image (forward rotation here would reverse it).
-                return float2(dot(position, direction),
-                              dot(position, float2(-direction.y, direction.x)));
-            }
 
             float4 MotionNoise(Varyings input, float2 motion)
             {
@@ -194,6 +203,52 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                         return previous;
                 }
                 return float4(0, 0, 0, timestamp);
+            }
+            ENDHLSL
+        }
+        Pass
+        {
+            Name "Motion Oriented Scene Distortion"
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend One Zero, Zero One
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment DistortScene
+
+            float4 DistortScene(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+                float2 screenSize = max(_ScaledScreenParams.xy, float2(1, 1));
+                float2 motion = SAMPLE_TEXTURE2D_X_LOD(
+                    _CachedMotionDirections, sampler_PointClamp, input.texcoord, 0).rg;
+                float2 pixels = motion * screenSize;
+                float speed = length(pixels);
+                float2 direction = pixels / max(speed, 1e-6);
+                float2 mapDirection = speed > 0 ? direction : float2(1, 0);
+                float sine, cosine;
+                sincos(radians(_DistortionAngle), sine, cosine);
+                mapDirection = float2(cosine * mapDirection.x - sine * mapDirection.y,
+                                      sine * mapDirection.x + cosine * mapDirection.y);
+
+                float2 position = (input.positionCS.xy - 0.5 * screenSize) / screenSize.y;
+                float2 mapUV = RotateNoiseUV(position, mapDirection) * _DistortionMap_ST.xy
+                             + 0.5 + _DistortionMap_ST.zw;
+                float2 uvDx = RotateNoiseUV(ddx(position), mapDirection) * _DistortionMap_ST.xy;
+                float2 uvDy = RotateNoiseUV(ddy(position), mapDirection) * _DistortionMap_ST.xy;
+                float strength = saturate(SAMPLE_TEXTURE2D_GRAD(
+                    _DistortionMap, sampler_LinearRepeat, mapUV, uvDx, uvDy).r);
+
+                // Backward sampling moves visible features along the MV direction.
+                // Magnitude is controlled by the separate map and a pixel distance.
+                float2 offsetUV = direction * (_DistortionPixels * strength) / screenSize;
+                float2 halfTexel = 0.5 / screenSize;
+                float2 sceneUV = clamp(input.texcoord - offsetUV, halfTexel, 1.0 - halfTexel);
+                // _BlitTexture is a copy of this frame's scene BEFORE this effect.
+                return SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, sceneUV, 0);
             }
             ENDHLSL
         }

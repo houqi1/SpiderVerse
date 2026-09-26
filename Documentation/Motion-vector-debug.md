@@ -9,7 +9,7 @@
 3. 进入 Play Mode，在 Game 视图移动相机或物体。
 4. 在 `Assets/Shader/MotionVectorDebug.mat` 中调整 Display Mode。默认 NoiseOverlay，将噪声叠加到场景；Direction / SignedRG / Speed 使用 Sensitivity 放大运动。关闭 Renderer 上的 `Motion Vector Debug` Feature 即恢复正常渲染。重复执行菜单不会重复添加。
 
-当前 `LineArt_Renderer` 已迁移到自定义 Feature。其他 Renderer 可以执行同一安装菜单，旧版 Full Screen Pass 会被禁用，避免重复叠加。也可以手动添加 Motion Vector Noise Feature 并指定上述材质；它会请求 Motion 输入并在 After Rendering Post Processing 执行。相机堆栈只在 Base Camera 上应用，Overlay Camera 继续在其上绘制。
+当前 `LineArt_Renderer` 已迁移到自定义 Feature。其他 Renderer 可以执行同一安装菜单，旧版 Full Screen Pass 会被禁用，避免重复叠加。也可以手动添加 Motion Vector Noise Feature 并指定上述材质；它会请求 Motion 输入并在 Before Rendering Post Processing 执行。场景扭曲和加色叠加完成后，再进入 URP 后处理，因此结果会受到 Bloom、色调映射等已启用效果的影响。相机堆栈只在 Base Camera 上应用，Overlay Camera 继续在其上绘制。
 
 ## 更新频率与方向保持
 
@@ -66,7 +66,25 @@ LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 
 | Direction Threshold | 单位是像素/帧；低于此速度使用默认朝向，避免近零向量造成随机方向。 |
 运动遮罩始终开启，以缓存矢量长度大于 0 判断，向左或向下的负分量运动也包含在内。黑色贡献为零；灰色按亮度贡献，不进行硬阈值切割。
 
-NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 当前场景 RGB + 运动遮罩 × 旋转后纹理亮度 × Noise Tint.rgb × saturate(Add Intensity × Tint.a)`，保留场景 Alpha，不需要复制场景颜色。直接输出和调试模式仍替换场景 RGB。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Add Intensity，以显示灰度纹理。
+NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 场景 RGB + 运动遮罩 × 旋转后纹理亮度 × Noise Tint.rgb × saturate(Add Intensity × Tint.a)`，保留场景 Alpha。开启下方的场景扭曲层时，先对本帧场景颜色副本进行偏移，再加上噪声颜色；关闭扭曲时，加色本身不需要复制场景。直接输出和调试模式仍替换场景 RGB。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Add Intensity，以显示灰度纹理。
+
+## Motion Vector 场景扭曲层
+
+在材质的 **Motion Oriented Scene Distortion** 中设置：
+
+| 参数 | 含义 |
+| --- | --- |
+| Enable Scene Distortion | 启用场景颜色偏移，默认开启。仅 NoiseOverlay 且 Output Mapped Noise Only 关闭时执行。 |
+| Distortion Strength Map (R) | 独立的强度贴图。按缓存 MV 方向旋转后取 R 通道：黑色为零，白色为完整偏移，灰色按比例。当前材质先使用 CharacterParticleNoise，可替换为另一张纹理。 |
+| Tiling / Offset | 强度贴图独立的缩放和偏移，屏幕空间、Repeat 采样。 |
+| Distortion Distance (Pixels) | 最大偏移距离，默认 8 像素。正值使可见场景图案沿 MV 方向移动，负值反向，0 关闭偏移与颜色复制。 |
+| Distortion Map Angle Offset (Degrees) | 额外旋转强度贴图，默认 0；不改变场景偏移方向，也不影响加色层的 Noise Angle。 |
+
+`偏移像素 = normalize(缓存 MV × 屏幕尺寸) × 强度贴图 R × Distortion Distance`
+
+`输出 RGB = SceneColor(UV − 偏移像素 / 屏幕尺寸) + 原有加色层`
+
+零 MV 的像素不偏移。偏移方向和强度贴图的旋转都使用原有停帧缓存，遵循 Fixed Rate / Sync With Animation；MV 大小不再乘到偏移距离上。强度贴图不使用加色层的 Contrast 或 Tint。屏幕边缘限制到有效采样区域。SceneColor 是本帧、该效果执行前的完整相机颜色（包含此前已绘制的透明物体），每帧重新复制，不累积历史颜色。Render Graph 使用临时颜色副本，兼容模式使用每相机颜色副本，后者随相机历史释放。额外开销是一张颜色纹理、一次颜色复制和一次全屏扭曲绘制。
 
 首次使用或历史重置时，无运动像素采用 Angle Offset 指定的默认方向。历史保存在屏幕空间，没有重投影或遮挡检测；持续移动的相机/物体可能让旧方向暂时落在新的表面或背景上，方向突变处也可能出现不连续。无限保持时这种旧方向可以一直保留，可以缩短 Reset After Seconds 或手动重置。这里旋转的是纹理采样坐标，不会随运动平流噪声。
 
