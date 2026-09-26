@@ -175,6 +175,7 @@ MonoBehaviour:
   - {fileID: -6102837461928374651}
   - {fileID: 5303485742155498541}
   - {fileID: 759746206708023037}
+  - {fileID: 4182119195389091606}
   m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eabfd3e485226298b0a
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
@@ -243,6 +244,27 @@ MonoBehaviour:
       restoreCamera: 1
       offset: {x: 0, y: 0, z: 0, w: 0}
       cameraFieldOfView: 60
+--- !u!114 &4182119195389091606
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e13eaf35b99499b86e7e4cf3a9944dc, type: 3}
+  m_Name: Motion Vector Debug
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  passMaterial: {fileID: 2100000, guid: d18e95e7f6c74707853f918a1ce5c402, type: 2}
+  updateMode: 1
+  updateRate: 12
+  holdLastDirection: 0
+  resetAfterSeconds: 0
+  showInSceneView: 1
+  cameraCutDistance: 5
+  cameraCutAngle: 45
 --- !u!114 &5303485742155498541
 MonoBehaviour:
   m_ObjectHideFlags: 0

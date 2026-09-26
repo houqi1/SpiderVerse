@@ -486,6 +486,28 @@ Shader "Custom/Toon"
             #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
+
+        Pass
+        {
+            Name "MotionVectors"
+            Tags { "LightMode" = "MotionVectors" }
+
+            Cull [_Cull]
+            ZWrite On
+            ZTest LEqual
+            ColorMask RG
+
+            HLSLPROGRAM
+            #pragma multi_compile _ LOD_FADE_CROSSFADE
+
+            // Keep the material buffer identical to the visible/depth passes.
+            #include "ToonInput.hlsl"
+            // URP reads the previous skinned position from TEXCOORD4, as well as
+            // previous object/camera matrices. This captures bone animation even
+            // when the character's root transform does not move.
+            #include_with_pragmas "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ObjectMotionVectors.hlsl"
+            ENDHLSL
+        }
     }
 
     FallBack Off
