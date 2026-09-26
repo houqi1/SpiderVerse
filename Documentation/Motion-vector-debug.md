@@ -17,21 +17,27 @@
 
 | Feature 参数 | 含义 |
 | --- | --- |
-| Update Mode = Sync With Animation | 可选。跟随相机当前激活的 Line Art Feature 的采样 generation，在该姿势的运动矢量生成后发布方向缓存。调整 Line Art 的 Update Rate 即可同步调整动画、线条与噪声方向节奏。 |
+| Update Mode = Sync With Animation | 可选。播放时优先跟随 LineArtSteppedAnimator 完成姿势更新后发出的采样序号，保存当前整张 MV，并发布上一次成功捕获的动画采样 MV。没有对应抽帧组件时才跟随 Line Art 的相机采样时钟。动画保持姿势的中间渲染帧不覆盖候选缓存；迟到的重绘保留已有结果。首次成功捕获姿势更新时直接显示该次结果。切换同步来源、模式或进入回退时重建历史。 |
 | Update Mode = Fixed Rate | 默认。按时间以 Update Rate 指定的 Hz 更新运动矢量缓存；两次更新之间保持整张纹理不变，无插值。 |
 | Update Rate | 默认 12 Hz，范围 1–60。同步模式下仅在找不到激活的 Line Art Feature 时作为固定频率回退值；实际可见更新次数不超过渲染帧率。 |
 | Hold Last Direction | 默认关闭：每次刷新用当前整张运动矢量覆盖缓存，无有效运动的像素归零。开启后会逐像素保留最后一次运动矢量和运动遮罩，可能在物体经过的旧屏幕位置留下旋转残影。它与刷新间隔内的整张纹理停帧是两个独立行为。 |
 | Reset After Seconds | 默认 0，表示无限保持。设置 0–30 秒的延迟后，无有效运动的像素恢复默认方向；改变在下次发布时可见。计时精度约 1/32 秒，使用绝对时间戳避免高帧率下半精度计数器停滞。 |
-| Show In Scene View | 是否同时在 Scene 视图应用。Game 和 Scene 相机拥有独立缓存。 |
+| Show In Scene View | 是否同时在 Scene 视图应用。Game 和 Scene 使用各自视角的独立 MV 缓存；播放时 Scene 优先跟随以 Main Camera 为参考的抽帧角色，没有匹配时跟随第一个活动抽帧角色。 |
 | Camera Cut Distance / Angle | 相机单次渲染间的位置/旋转变化超过阈值时重置缓存；距离单位为世界单位，距离 0 表示关闭位置判定。 |
 
-默认组合是 Fixed Rate + Hold Last Direction 关闭，无插值。Reset After Seconds 仅在开启 Hold Last Direction 时有效。Feature 的右键菜单 **Reset Direction History** 可手动清空；相机分辨率变化、明显投影变化、暂停渲染后重新出现及镜头跳切也会重建有效历史。
+默认组合是 Fixed Rate + Hold Last Direction 关闭，无插值。Reset After Seconds 仅在开启 Hold Last Direction 时有效。Feature 的右键菜单 **Reset Direction History** 可手动清空；相机分辨率变化、明显投影变化、镜头跳切、材质或同步来源变化也会重建历史。Game 相机暂停渲染后重新出现会重建历史；Scene 普通漏帧或暂时隐藏不清空缓存。Inspector 验证触发的 Create 不再无条件清空历史。
 
-采集与发布分开：GPU 每帧将当前有效运动矢量（RG 保存原始有符号 UV 位移，保留方向和大小）写入候选缓存，零运动按保持/超时设置处理；仅在固定时钟或动画采样变化时，将候选缓存复制到噪声旋转和调试模式共同读取的发布纹理。这样固定时钟错过动画运动脉冲时，仍能读取之前捕获的有效方向。低于阈值的运动不算有效；关闭 Hold Last Direction 后，固定时钟仍可能看到零运动帧。
+采集与发布分开：候选纹理 RG 保存原始有符号 UV 位移，保留方向和大小；零运动按保持/超时设置处理。Sync With Animation 仅在动画采样变化时采集 MV，并发布上一次动画采样的候选纹理。例如第 N 次采样写入 MV(N)，同时显示 MV(N−1)，中间保持姿势的渲染帧不读写候选历史。这样普通静止渲染帧的零 MV 不会覆盖上一次动画采样。Fixed Rate（包括同步不可用时的回退）仍每渲染帧采集，并在时钟到期时发布当前候选纹理。两种模式的 Mask、旋转方向与调试视图均共用发布纹理，两次发布之间整张纹理不变。开启 Hold Last Direction 时，候选纹理仍包含逐像素保留的方向；默认关闭时如果动画采样帧本身为零运动，仍会保存并显示该零值。缓存保留非零运动；Direction Threshold 仅控制接近零时的旋转朝向。
 
 Direction / SignedRG / Speed 与 NoiseOverlay / NoiseOnly / Output Mapped Noise Only 全部读取同一张发布缓存。可将 Update Rate 设为 1 Hz，观察调试画面每秒更新一次，期间旋转噪声所用的运动矢量纹理完全保持。首次渲染、尺寸变化和历史重置会立即刷新。底层场景仍正常渲染，所以叠加模式下场景继续运动；直接输出模式更容易观察噪声本身的停帧。
 
-每个相机使用三张 RGBA16F 纹理（候选双缓冲 + 发布缓存），1080p 约 47.5 MiB，另有每帧采集和定时复制开销。降低这里的 Hz 调整的是视觉节奏，不代表原生运动矢量生成成本降低。固定模式使用不受 Time Scale 影响的时钟，播放暂停时不会自行推进；同步模式跟随已有 Line Art 时钟。
+每个相机使用三张 RGBA16F 纹理（候选双缓冲 + 发布缓存），1080p 约 47.5 MiB，另有采集和定时复制开销。降低这里的 Hz 调整的是视觉节奏，不代表原生运动矢量生成成本降低。固定模式使用不受 Time Scale 影响的时钟，播放暂停时不会自行推进；同步模式跟随已有 Line Art 时钟。
+
+### Scene 视图的同步
+
+LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 Time.frameCount，并请求 Scene 重绘（同一帧多个角色只请求一次）。后处理读取这个信号，不为 Scene 单独推进动画时钟。Game 选择以自身相机为参考的抽帧组件；Scene 优先选择以 Main Camera 为参考的组件，否则选择第一个活动组件。
+
+如果 Scene 重绘晚于该次姿势更新帧，就保留候选和发布纹理，等待下一次同帧捕获的动画采样，避免将静止帧的零 MV 当成新的动画样本。Mask 与旋转方向始终来自同一张发布缓存。真正重置后先初始化纹理；第一张成功捕获的动画样本会直接显示，不把初始化的空缓存当作上一动画样本发布。Scene 的 MV 仍按自身视角生成，不复用 Game 的屏幕空间纹理。成功采到的姿势更新帧如果确实没有运动，仍允许缓存归零。
 
 ## 输出含义
 
@@ -40,7 +46,7 @@ Direction / SignedRG / Speed 与 NoiseOverlay / NoiseOnly / Output Mapped Noise 
 | Direction | 色相表示缓存运动方向，亮度表示缓存位移大小；缓存为零时为黑色。 |
 | SignedRG | R 表示水平分量，G 表示垂直分量；`RG = saturate(0.5 + motion * Sensitivity)`，B 固定为 0.5。零运动输出中性灰。 |
 | Speed | `saturate(length(motion * Sensitivity))` 灰度图；缓存为零时为黑色。 |
-| NoiseOverlay | 将逐像素按运动方向旋转的噪声透明叠加到场景。 |
+| NoiseOverlay | 取缓存运动矢量长度大于 0 的像素，将旋转纹理的白色亮度乘以指定颜色，再加到场景颜色。 |
 | NoiseOnly | 单独显示旋转后的噪声灰度，便于观察方向。 |
 
 ## 屏幕空间噪声旋转
@@ -51,16 +57,16 @@ Direction / SignedRG / Speed 与 NoiseOverlay / NoiseOnly / Output Mapped Noise 
 
 | 材质参数 | 含义 |
 | --- | --- |
-| Output Mapped Noise Only | 在 NoiseOverlay 模式开启时直接输出映射后的噪声，保留 Contrast、Tint RGB 和运动遮罩，忽略 Opacity 与 Tint Alpha，完全覆盖场景颜色。默认关闭；NoiseOnly 模式本身已经直接输出灰度。 |
+| Output Mapped Noise Only | 在 NoiseOverlay 模式开启时直接输出映射后的噪声，保留 Contrast、Tint RGB 和运动遮罩，忽略 Add Intensity 与 Tint Alpha，完全覆盖场景颜色。默认关闭；NoiseOnly 模式本身已经直接输出灰度。 |
 | Noise Map 的 Tiling / Offset | 噪声缩放和偏移；Tiling 按屏幕高度为单位，X 小、Y 大时噪声沿运动方向拉长。 |
-| Noise Opacity | 叠加透明度，0 为原画面，1 为完全显示噪声。 |
-| Noise Tint | 噪声染色，Alpha 进一步控制叠加强度。 |
+| Noise Add Intensity | 加色强度，0 不贡献颜色，1 使用完整颜色强度；内部沿用 _NoiseOpacity 属性。 |
+| Noise Tint | 白色区域所添加的颜色，支持 HDR；Alpha 进一步控制加色强度。 |
 | Noise Contrast | 噪声灰度围绕 0.5 调整对比度。 |
 | Noise Angle Offset | 在运动方向上增加角度偏移；原贴图纹理沿 Y 轴时可尝试 90 度。 |
 | Direction Threshold | 单位是像素/帧；低于此速度使用默认朝向，避免近零向量造成随机方向。 |
-| Noise Only On Moving Pixels | 开启后使用缓存的运动遮罩；Hold Last Direction 开启时，最后一次有效运动的遮罩也保持，直到超时或重置。 |
+运动遮罩始终开启，以缓存矢量长度大于 0 判断，向左或向下的负分量运动也包含在内。黑色贡献为零；灰色按亮度贡献，不进行硬阈值切割。
 
-NoiseOverlay 通过硬件 Alpha Blend 叠加，不需要复制场景颜色。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Opacity，以显示灰度纹理。
+NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 当前场景 RGB + 运动遮罩 × 旋转后纹理亮度 × Noise Tint.rgb × saturate(Add Intensity × Tint.a)`，保留场景 Alpha，不需要复制场景颜色。直接输出和调试模式仍替换场景 RGB。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Add Intensity，以显示灰度纹理。
 
 首次使用或历史重置时，无运动像素采用 Angle Offset 指定的默认方向。历史保存在屏幕空间，没有重投影或遮挡检测；持续移动的相机/物体可能让旧方向暂时落在新的表面或背景上，方向突变处也可能出现不连续。无限保持时这种旧方向可以一直保留，可以缩短 Reset After Seconds 或手动重置。这里旋转的是纹理采样坐标，不会随运动平流噪声。
 
@@ -89,3 +95,5 @@ URP 17 的常规物体运动矢量面向不透明/Alpha Clip 材质；透明物�
 修正了候选双缓冲交换后按读写位置重命名的问题：URP 的重新分配判断包含纹理名称，原实现因此每帧重新分配并重置发布时钟。现在名称随纹理保留，正常帧之间交换读写角色不会触发该重置。本次修正尚未运行 Unity 验证。
 
 逐次旋转残留：旧默认配置 Hold Last Direction 开启且 Reset After Seconds = 0，会无限保留物体经过位置的运动方向。现已关闭 Feature 的默认值及 LineArt_Renderer 中的该选项；停帧依然由发布时钟控制，每次发布完整替换旧缓存。此更改尚未在 Unity 中运行验证。
+
+本次白色区域加色修改尚未运行 Unity 验证。

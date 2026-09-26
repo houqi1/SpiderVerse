@@ -7,12 +7,11 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         [Header(Motion Oriented Noise)]
         [ToggleUI] _NoiseOutputOnly ("Output Mapped Noise Only", Float) = 0
         _NoiseMap ("Noise Map (R)", 2D) = "gray" {}
-        _NoiseTint ("Noise Tint", Color) = (1, 1, 1, 1)
-        _NoiseOpacity ("Noise Opacity", Range(0, 1)) = 0.35
+        [HDR] _NoiseTint ("Noise Tint", Color) = (1, 1, 1, 1)
+        _NoiseOpacity ("Noise Add Intensity", Range(0, 1)) = 0.35
         _NoiseContrast ("Noise Contrast", Range(0, 4)) = 1.5
         _NoiseAngle ("Noise Angle Offset (Degrees)", Range(-180, 180)) = 0
         _MotionThreshold ("Direction Threshold (Pixels Per Frame)", Range(0.001, 5)) = 0.1
-        [Toggle] _NoiseMotionOnly ("Noise Only On Moving Pixels", Float) = 0
     }
 
     SubShader
@@ -36,7 +35,6 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             float _NoiseContrast;
             float _NoiseAngle;
             float _MotionThreshold;
-            float _NoiseMotionOnly;
             float _NoiseOutputOnly;
         CBUFFER_END
 
@@ -55,9 +53,10 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             Cull Off
             ZWrite Off
             ZTest Always
-            // NoiseOverlay composites directly over the camera target, without
-            // fetching camera color. Debug/NoiseOnly return alpha=1 to replace it.
-            Blend SrcAlpha OneMinusSrcAlpha, Zero One
+            // RGB = source + destination * (1 - source alpha).
+            // NoiseOverlay returns weighted RGB and alpha=0 for addition;
+            // debug/direct output returns alpha=1 for replacement. Preserve scene alpha.
+            Blend One OneMinusSrcAlpha, Zero One
 
             HLSLPROGRAM
             #pragma target 3.5
@@ -80,7 +79,8 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 float threshold = max(_MotionThreshold, 0.001);
                 float2 direction = pixelSpeed >= threshold
                     ? motionPixels / max(pixelSpeed, 1e-6) : float2(1.0, 0.0);
-                float movementMask = smoothstep(threshold, threshold * 2.0, pixelSpeed);
+                // Select nonzero magnitude, including negative X/Y directions.
+                float motionMask = pixelSpeed > 0.0 ? 1.0 : 0.0;
 
                 float sine, cosine;
                 sincos(radians(_NoiseAngle), sine, cosine);
@@ -100,8 +100,6 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 float noise = SAMPLE_TEXTURE2D_GRAD(_NoiseMap, sampler_LinearRepeat,
                                                     noiseUV, uvDx, uvDy).r;
                 noise = saturate((noise - 0.5) * _NoiseContrast + 0.5);
-                float motionMask = _NoiseMotionOnly > 0.5
-                    ? movementMask : 1.0;
 
                 if (_DisplayMode > 3.5)
                     return float4((noise * motionMask).xxx, 1.0);
@@ -111,8 +109,9 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 if (_NoiseOutputOnly > 0.5)
                     return float4(noise * _NoiseTint.rgb * motionMask, 1.0);
 
-                return float4(noise * _NoiseTint.rgb,
-                              saturate(_NoiseOpacity * _NoiseTint.a * motionMask));
+                float3 contribution = noise * motionMask * _NoiseTint.rgb
+                                    * saturate(_NoiseOpacity * _NoiseTint.a);
+                return float4(contribution, 0.0);
             }
 
             float4 Frag(Varyings input) : SV_Target
@@ -176,14 +175,14 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                     _MotionVectorTexture, sampler_PointClamp, input.texcoord, 0).rg;
                 float2 pixels = motion * max(_ScaledScreenParams.xy, float2(1, 1));
                 float speed = length(pixels);
-                float threshold = max(_MotionThreshold, 0.001);
                 // RG: signed UV displacement. B: held movement mask. A: last motion
                 // time modulo 64 seconds, quantized down to an exact half-float.
                 // Never accumulate tiny frame deltas in a half-float age counter.
                 float timestamp = floor(_CacheTime * 32.0) / 32.0;
-                if (speed >= threshold)
-                    return float4(motion,
-                                  smoothstep(threshold, threshold * 2.0, speed), timestamp);
+                // Preserve every nonzero vector for the additive movement mask.
+                // Direction Threshold only stabilizes the noise's orientation.
+                if (speed > 0.0)
+                    return float4(motion, 1.0, timestamp);
 
                 if (_CacheValid > 0.5 && _HoldLastDirection > 0.5)
                 {

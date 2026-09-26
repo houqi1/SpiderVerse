@@ -13,6 +13,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     public enum UpdateMode { SyncWithAnimation, FixedRate }
 
     public Material passMaterial;
+    [Tooltip("Sync With Animation saves a whole motion-vector sample at each animation tick and publishes the preceding animation sample. Fixed Rate publishes the current frame's sample.")]
     public UpdateMode updateMode = UpdateMode.FixedRate;
     [Tooltip("Updates per second in Fixed Rate mode, or when no active Line Art feature is available.")]
     [Range(1, 60)] public float updateRate = 12;
@@ -31,7 +32,8 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     public override void Create()
     {
         if (pass == null) pass = new NoisePass(this);
-        revision++;
+        // Inspector validation calls Create repeatedly. Retain live histories;
+        // material/size/source changes and explicit resets are handled below.
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -61,7 +63,9 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         public Camera camera;
         public RTHandle read, write, published;
         public readonly MotionDirectionUpdateClock clock = new MotionDirectionUpdateClock();
-        public bool valid;
+        public bool valid, synchronized, hasSample, wasPlaying;
+        public int sampleSourceId;
+        public Material material;
         public int revision = -1, lastFrame = -1;
         public double lastTime;
         public Vector3 position;
@@ -122,7 +126,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         {
             public CameraHistory history;
             public RTHandle previous, next;
-            public bool collect, publish, reset;
+            public bool collect, publish, reset, publishPrevious;
             public float time;
         }
 
@@ -165,25 +169,58 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                 Quaternion.Angle(camera.transform.rotation, history.rotation) > owner.cameraCutAngle ||
                 ProjectionChanged(camera.nonJitteredProjectionMatrix, history.projection));
             bool reset = !history.valid || resized || history.revision != owner.revision || cut ||
-                         threshold != history.threshold || now < history.lastTime || now - history.lastTime > 1.0 ||
+                         threshold != history.threshold || now < history.lastTime ||
+                         history.wasPlaying != Application.isPlaying || history.material != owner.passMaterial;
+            // Scene repainting is intermittent, including while the game plays.
+            // Missing a player frame or hiding the view is not a history reset.
+            if (camera.cameraType != CameraType.SceneView)
+                reset |= now - history.lastTime > 1.0 ||
                          (Application.isPlaying && history.lastFrame != frame && history.lastFrame != frame - 1);
 
             bool synchronized = false;
             int generation = 0;
-            if (owner.updateMode == UpdateMode.SyncWithAnimation &&
-                ObjectLineArtFeature.TryGetCameraSample(camera, out var sample))
+            int sampleSourceId = 0;
+            bool canCapture = true;
+            if (owner.updateMode == UpdateMode.SyncWithAnimation)
             {
-                synchronized = true;
-                generation = sample.generation;
+                if (LineArtSteppedAnimator.TryGetMotionSample(camera, out var pose))
+                {
+                    synchronized = true;
+                    generation = pose.generation;
+                    sampleSourceId = pose.sourceId;
+                    // A late Scene repaint may first see a generation after its
+                    // motion pulse has passed. Keep the whole existing snapshot
+                    // until a pose update is actually rendered; never cache that
+                    // intervening held-pose frame as the animation sample.
+                    canCapture = pose.frame == Time.frameCount;
+                }
+                else if (ObjectLineArtFeature.TryGetCameraSample(camera, out var sample))
+                {
+                    synchronized = true;
+                    generation = sample.generation;
+                    sampleSourceId = camera.GetInstanceID();
+                }
             }
+
+            // A per-frame candidate is not a previous animation sample. Rebuild
+            // history when entering/leaving synchronization (including fallback).
+            reset |= history.valid && (history.synchronized != synchronized ||
+                                      history.sampleSourceId != sampleSourceId);
+            bool publish = (reset || canCapture) &&
+                history.clock.Tick(now, frame, synchronized, generation, owner.updateRate, reset);
 
             var plan = new FramePlan
             {
                 history = history, previous = history.read, next = history.write,
-                collect = reset || history.lastFrame != frame,
+                // Held-pose render frames commonly contain zero MV. In sync mode
+                // they must not overwrite the snapshot captured at the last tick.
+                collect = synchronized ? publish : reset || history.lastFrame != frame,
                 reset = reset,
+                // In sync mode previous is the last animation tick's snapshot.
+                // On first use/reset there is no valid preceding sample.
+                publishPrevious = synchronized && !reset && history.hasSample,
                 time = (float)(now % 64.0),
-                publish = history.clock.Tick(now, frame, synchronized, generation, owner.updateRate, reset)
+                publish = publish
             };
             if (plan.collect)
             {
@@ -193,6 +230,12 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                 history.write = plan.previous;
             }
             history.valid = true;
+            history.synchronized = synchronized;
+            history.sampleSourceId = sampleSourceId;
+            history.wasPlaying = Application.isPlaying;
+            history.material = owner.passMaterial;
+            if (reset) history.hasSample = false;
+            if (plan.collect && canCapture) history.hasSample = true;
             history.revision = owner.revision;
             history.lastFrame = frame;
             history.lastTime = now;
@@ -243,11 +286,12 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             if (!resources.motionVectorColor.IsValid() || !resources.activeColorTexture.IsValid()) return;
             var plan = Prepare(cameraData.camera, cameraData.cameraTargetDescriptor);
             var published = renderGraph.ImportTexture(plan.history.published);
+            // Reuse this graph handle for collection and previous-sample publication.
+            var previous = renderGraph.ImportTexture(plan.previous);
             var collected = TextureHandle.nullHandle;
 
             if (plan.collect)
             {
-                var previous = renderGraph.ImportTexture(plan.previous);
                 var next = renderGraph.ImportTexture(plan.next);
                 collected = next;
                 using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Collect Motion Directions", out var data))
@@ -267,9 +311,9 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             {
                 using (var builder = renderGraph.AddRasterRenderPass<CopyData>("Publish Motion Directions", out var data))
                 {
-                    // Reuse the exact graph handle written by the collection pass.
-                    // Importing the same RTHandle again creates a separate graph resource.
-                    data.source = plan.collect ? collected : renderGraph.ImportTexture(plan.history.read);
+                    // Sync publishes the preceding animation sample. This tick's
+                    // snapshot stays in the other buffer until the next tick.
+                    data.source = plan.publishPrevious || !plan.collect ? previous : collected;
                     builder.UseTexture(data.source, AccessFlags.Read);
                     builder.SetRenderAttachment(published, 0, AccessFlags.WriteAll);
                     builder.SetRenderFunc((CopyData d, RasterGraphContext context) =>
@@ -309,7 +353,8 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                 if (plan.publish)
                 {
                     CoreUtils.SetRenderTarget(cmd, plan.history.published);
-                    Blitter.BlitTexture(cmd, plan.history.read, new Vector4(1, 1, 0, 0), 0, false);
+                    var source = plan.publishPrevious ? plan.previous : plan.history.read;
+                    Blitter.BlitTexture(cmd, source, new Vector4(1, 1, 0, 0), 0, false);
                 }
                 CoreUtils.SetRenderTarget(cmd, renderingData.cameraData.renderer.cameraColorTargetHandle);
                 cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 0, MeshTopology.Triangles, 3, 1, Properties(plan, true));

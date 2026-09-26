@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SpiderVerse.LineArt
@@ -8,6 +9,19 @@ namespace SpiderVerse.LineArt
     [AddComponentMenu("Animation/Line Art Stepped Animator")]
     public sealed class LineArtSteppedAnimator : MonoBehaviour
     {
+        // Renderers observe completed pose changes; reading this must never
+        // advance an independent camera clock or evaluate the Animator again.
+        public struct MotionSample
+        {
+            public int sourceId;
+            public int generation;
+            public int frame;
+        }
+
+        static readonly List<LineArtSteppedAnimator> active = new List<LineArtSteppedAnimator>();
+#if UNITY_EDITOR
+        static int lastSceneRepaintFrame = -1;
+#endif
         [Tooltip("Camera using the Object Line Art Renderer Feature. Empty uses Main Camera. Its Update Rate controls animation sampling.")]
         public Camera referenceCamera;
 
@@ -20,6 +34,59 @@ namespace SpiderVerse.LineArt
         int lastGeneration;
         float pendingTime;
         bool warned;
+        int motionGeneration;
+        int motionFrame = -1;
+
+        void OnEnable()
+        {
+            if (!active.Contains(this)) active.Add(this);
+        }
+
+        public static bool TryGetMotionSample(Camera camera, out MotionSample sample)
+        {
+            sample = default;
+            if (!Application.isPlaying || !camera) return false;
+
+            bool sceneView = camera.cameraType == CameraType.SceneView;
+            Camera preferredCamera = sceneView ? Camera.main : camera;
+            LineArtSteppedAnimator selected = null;
+            foreach (var candidate in active)
+            {
+                if (!candidate || !candidate.isActiveAndEnabled || !candidate.ownsAnimator ||
+                    !candidate.sampledCamera || candidate.motionFrame < 0) continue;
+                if (candidate.sampledCamera == preferredCamera)
+                {
+                    selected = candidate;
+                    break;
+                }
+                // A Scene camera cannot drive an Animator itself. Prefer the
+                // main camera's actor, or the first active actor when absent.
+                if (sceneView && selected == null) selected = candidate;
+            }
+            if (!selected) return false;
+            sample = new MotionSample
+            {
+                sourceId = selected.GetInstanceID(),
+                generation = selected.motionGeneration,
+                frame = selected.motionFrame
+            };
+            return true;
+        }
+
+        void RecordMotionSample()
+        {
+            motionGeneration++;
+            motionFrame = Time.frameCount;
+#if UNITY_EDITOR
+            // Request preview rendering when the pose actually changes, rather
+            // than waiting for mouse movement to repaint the Scene view.
+            if (lastSceneRepaintFrame != motionFrame)
+            {
+                lastSceneRepaintFrame = motionFrame;
+                UnityEditor.SceneView.RepaintAll();
+            }
+#endif
+        }
 
         void LateUpdate()
         {
@@ -68,6 +135,7 @@ namespace SpiderVerse.LineArt
                 pendingTime = 0;
                 // This frame already received its normal Animator update.
                 animator.Update(0);
+                RecordMotionSample();
                 return;
             }
 
@@ -80,10 +148,18 @@ namespace SpiderVerse.LineArt
             pendingTime = 0;
             // Accumulate elapsed animation time so lower sampling rates do not slow
             // playback. Animator.speed and controller transitions still apply.
-            if (elapsed > 0) animator.Update(elapsed);
+            if (elapsed > 0)
+            {
+                animator.Update(elapsed);
+                RecordMotionSample();
+            }
         }
 
-        void OnDisable() => ReleaseAnimator();
+        void OnDisable()
+        {
+            active.Remove(this);
+            ReleaseAnimator();
+        }
 
         void ReleaseAnimator()
         {
@@ -97,6 +173,7 @@ namespace SpiderVerse.LineArt
             }
             ownsAnimator = false;
             sampledCamera = null;
+            motionFrame = -1;
             pendingTime = 0;
         }
     }

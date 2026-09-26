@@ -1,6 +1,6 @@
 using System;
 
-// Time-based publication; collecting samples and rendering continue between ticks.
+// Publication timing; the caller chooses when to collect samples between ticks.
 internal sealed class MotionDirectionUpdateClock
 {
     bool initialized;

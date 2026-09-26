@@ -258,10 +258,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_Active: 1
   passMaterial: {fileID: 2100000, guid: d18e95e7f6c74707853f918a1ce5c402, type: 2}
-  updateMode: 1
+  updateMode: 0
   updateRate: 12
   holdLastDirection: 0
-  resetAfterSeconds: 0
+  resetAfterSeconds: 0.1
   showInSceneView: 1
   cameraCutDistance: 5
   cameraCutAngle: 45
