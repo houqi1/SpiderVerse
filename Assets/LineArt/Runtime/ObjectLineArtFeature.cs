@@ -52,6 +52,7 @@ namespace SpiderVerse.LineArt
             public bool orthographic;
             public double nextUpdate;
             public int generation;
+            public int lastPlayFrame = -1;
         }
         // Steps the camera on line art's updateRate and publishes it before the frame draws.
         public void SyncLineArtCamera(Camera camera)
@@ -64,7 +65,10 @@ namespace SpiderVerse.LineArt
                 cameraHolds.Add(id, hold);
             }
             double now = LineArtTime.Now;
-            if (hold.generation == 0 || now >= hold.nextUpdate)
+            // Animator stepping and render passes can request this sample far apart in
+            // one slow frame. They must still observe the same generation in Play mode.
+            bool canAdvance = !Application.isPlaying || hold.lastPlayFrame != Time.frameCount;
+            if (canAdvance && (hold.generation == 0 || now >= hold.nextUpdate))
             {
                 hold.position = camera.transform.position;
                 hold.forward = camera.transform.forward;
@@ -72,6 +76,7 @@ namespace SpiderVerse.LineArt
                 hold.nextUpdate = now + 1.0 / Math.Max(1, settings.updateRate);
                 hold.generation++;
             }
+            if (Application.isPlaying) hold.lastPlayFrame = Time.frameCount;
             Vector3 p = hold.position;
             Shader.SetGlobalVector(LineArtCameraPositionId, new Vector4(p.x, p.y, p.z, 1f));
         }

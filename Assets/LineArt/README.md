@@ -18,6 +18,16 @@
 - Shader 字段保留 `ObjectLineArt.shader` 引用，确保构建时保留 Shader。
 - `SpiderVerse > Line Art > Create or Update Preview Scene` 可以重建接线；不会覆盖已存在预览场景里的其他对象。原 SampleScene、PC_Renderer 上的原描边配置不被替换。
 
+## 角色抽帧动画
+
+给角色 **Animator 所在的同一个物体** 添加 `Animation > Line Art Stepped Animator`。`Reference Camera` 指向启用了 Object Line Art Feature 的相机，留空使用 Main Camera。进入 Play 后生效；无需另外设置动画帧率，直接跟随该相机 Line Art 的 `Update Rate`（预览资源当前为 12）。修改 Update Rate 后，后续更新自动跟随。
+
+脚本在 Line Art 的共享采样代次变化时手动推进 Animator，其余帧保持姿态。累积实际动画时间，保持播放速度；支持 Animator.speed，普通模式跟随 Time.timeScale，Unscaled Time 模式使用未缩放时间。运行时 Animator 的 Enabled 会由脚本关闭以接管更新；要恢复普通播放，请关闭 **Line Art Stepped Animator** 组件。相机或 Feature 不可用时也会释放接管并给出一次提示。多个角色使用同一相机即可共享采样节奏。
+
+此组件适用于由 Animator Controller 驱动的角色；不接管 Timeline、物理模拟或其他脚本直接写入的骨骼。Root Motion 和动画事件也随采样更新，Fixed 模式在这里按渲染采样节奏推进，不保留物理固定步同步。CPU Line Art 后台提取仍可能因计算耗时滞后于姿态。编辑模式 Animation 窗口预览不受此组件控制。
+
+手动更新 API：[Unity Animator.Update](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Animator.Update.html)。
+
 ## 多层描边与 Noise Frequency
 
 在 `Object Line Art Source > Stroke Layers` 点击 **Add Layer**。每层拥有独立的 Appearance，可复制、开关和上下排序；后面的层覆盖前面的层。取消 **Use Source Renderers** 后，可在 **Layer Renderers** 单独指定该层的对象；此时列表为空表示该层不绘制。保留勾选则沿用 Source Renderers（Source 列表为空时自动获取子级 Renderer）。
