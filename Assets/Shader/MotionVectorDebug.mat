@@ -25,7 +25,7 @@ Material:
     m_TexEnvs:
     - _DistortionMap:
         m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
-        m_Scale: {x: 4, y: 4}
+        m_Scale: {x: 3, y: 3}
         m_Offset: {x: 0, y: 0}
     - _NoiseMap:
         m_Texture: {fileID: 2800000, guid: a39f3accaf205044bacf0e9915cd6467, type: 3}
@@ -35,8 +35,14 @@ Material:
         m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _UnscaledSceneDistortionMap:
+        m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
+        m_Scale: {x: 3, y: 3}
+        m_Offset: {x: 0.46, y: 0.89}
     m_Ints: []
     m_Floats:
+    - _DebugOtherLayersMotion: 0
+    - _DebugThirdLayerMotion: 0
     - _DisplayMode: 3
     - _DistortionAngle: 0
     - _DistortionEnabled: 1
@@ -53,8 +59,14 @@ Material:
     - _OffsetSmearEnabled: 1
     - _OffsetSmearPixels: 12.4
     - _Sensitivity: 100
+    - _UnscaledMotionMaskMaxSpeed: 2
+    - _UnscaledMotionMaskMinSpeed: 0.1
+    - _UnscaledSceneDistortionAngle: 0
+    - _UnscaledSceneDistortionEnabled: 1
+    - _UnscaledSceneDistortionPixels: 16.8
+    - _UnscaledSceneDistortionThreshold: 0.2
     m_Colors:
     - _NoiseTint: {r: 1.9999999, g: 0, b: 1.6450634, a: 1}
-    - _OffsetSmearUVScale: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _OffsetSmearUVScale: {r: 0.98, g: 0.98, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

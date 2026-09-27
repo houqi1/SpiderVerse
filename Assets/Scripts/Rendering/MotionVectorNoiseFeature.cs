@@ -29,7 +29,16 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     NoisePass pass;
     int revision;
 
-    bool CanDistortScene => passMaterial != null && passMaterial.HasProperty("_DisplayMode") &&
+    // If both debug switches are enabled, the third layer's snapshot takes priority.
+    bool DebugThirdLayerMotion => passMaterial != null &&
+        passMaterial.HasProperty("_DebugThirdLayerMotion") &&
+        passMaterial.GetFloat("_DebugThirdLayerMotion") > 0.5f;
+
+    bool DebugMotionEnabled => DebugThirdLayerMotion || (passMaterial != null &&
+        passMaterial.HasProperty("_DebugOtherLayersMotion") &&
+        passMaterial.GetFloat("_DebugOtherLayersMotion") > 0.5f);
+
+    bool CanDistortScene => !DebugMotionEnabled && passMaterial != null && passMaterial.HasProperty("_DisplayMode") &&
         passMaterial.HasProperty("_NoiseOutputOnly") &&
         passMaterial.GetFloat("_DisplayMode") > 2.5f && passMaterial.GetFloat("_DisplayMode") < 3.5f &&
         passMaterial.GetFloat("_NoiseOutputOnly") < 0.5f;
@@ -44,7 +53,14 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         passMaterial.HasProperty("_OffsetSmearPixels") &&
         Mathf.Abs(passMaterial.GetFloat("_OffsetSmearPixels")) > 0.0001f;
 
-    bool SceneDistortionEnabled => SurfaceDistortionEnabled || OffsetSmearEnabled;
+    bool UnscaledSceneDistortionEnabled => CanDistortScene && passMaterial.passCount > 4 &&
+        passMaterial.HasProperty("_UnscaledSceneDistortionEnabled") &&
+        passMaterial.GetFloat("_UnscaledSceneDistortionEnabled") > 0.5f &&
+        passMaterial.HasProperty("_UnscaledSceneDistortionPixels") &&
+        Mathf.Abs(passMaterial.GetFloat("_UnscaledSceneDistortionPixels")) > 0.0001f;
+
+    bool SceneDistortionEnabled => SurfaceDistortionEnabled || OffsetSmearEnabled ||
+        UnscaledSceneDistortionEnabled;
 
     public override void Create()
     {
@@ -272,13 +288,21 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             return false;
         }
 
-        MaterialPropertyBlock Properties(FramePlan plan, bool composite)
+        MaterialPropertyBlock Properties(FramePlan plan, bool composite, bool currentAnimationSample = false)
         {
             var properties = new MaterialPropertyBlock();
             properties.SetVector(BlitScaleBias, new Vector4(1, 1, 0, 0));
             properties.SetFloat(UseCache, composite ? 1 : 0);
             if (composite)
-                properties.SetTexture(CacheTexture, plan.history.published.rt);
+            {
+                // The unscaled layer uses MV(N) immediately on animation tick N,
+                // then holds that snapshot until the next tick. Fixed-rate mode
+                // still uses the published snapshot to respect its update rate.
+                var snapshot = currentAnimationSample && plan.history.synchronized
+                    ? (plan.collect ? plan.next : plan.previous)
+                    : plan.history.published;
+                properties.SetTexture(CacheTexture, snapshot.rt);
+            }
             else
             {
                 properties.SetTexture(BlitTexture, plan.previous.rt);
@@ -415,15 +439,58 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                         });
                     }
                 }
+
+                if (owner.UnscaledSceneDistortionEnabled)
+                {
+                    TextureHandle unscaledScene = sceneCopy;
+                    if (owner.SurfaceDistortionEnabled || owner.OffsetSmearEnabled)
+                    {
+                        sceneDesc.name = "Motion Unscaled Distortion Scene Copy";
+                        unscaledScene = renderGraph.CreateTexture(sceneDesc);
+                        using (var builder = renderGraph.AddRasterRenderPass<CopyData>("Copy Scene For Unscaled Distortion", out var data))
+                        {
+                            data.source = resources.activeColorTexture;
+                            builder.UseTexture(data.source, AccessFlags.Read);
+                            builder.SetRenderAttachment(unscaledScene, 0, AccessFlags.WriteAll);
+                            builder.SetRenderFunc((CopyData d, RasterGraphContext context) =>
+                                Blitter.BlitTexture(context.cmd, d.source, new Vector4(1, 1, 0, 0), 0, false));
+                        }
+                    }
+
+                    using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Oriented Unscaled Scene Distortion", out var data))
+                    {
+                        data.material = owner.passMaterial;
+                        data.properties = Properties(plan, true, currentAnimationSample: true);
+                        data.passIndex = 4;
+                        data.source = unscaledScene;
+                        builder.UseTexture(unscaledScene, AccessFlags.Read);
+                        // Reuse the collection handle so the graph orders this draw
+                        // after the current animation sample has been captured.
+                        var currentSample = plan.history.synchronized
+                            ? (plan.collect ? collected : previous)
+                            : published;
+                        builder.UseTexture(currentSample, AccessFlags.Read);
+                        builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
+                        builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
+                        {
+                            d.properties.SetTexture(BlitTexture, d.source);
+                            context.cmd.DrawProcedural(Matrix4x4.identity, d.material, d.passIndex,
+                                MeshTopology.Triangles, 3, 1, d.properties);
+                        });
+                    }
+                }
             }
 
             using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Vector Noise", out var data))
             {
                 data.material = owner.passMaterial;
-                data.properties = Properties(plan, true);
+                data.properties = Properties(plan, true, currentAnimationSample: owner.DebugThirdLayerMotion);
                 data.passIndex = 0;
                 builder.UseTexture(resources.motionVectorColor, AccessFlags.Read);
-                builder.UseTexture(published, AccessFlags.Read);
+                var debugSample = owner.DebugThirdLayerMotion && plan.history.synchronized
+                    ? (plan.collect ? collected : previous)
+                    : published;
+                builder.UseTexture(debugSample, AccessFlags.Read);
                 // Alpha blending reads the existing camera target.
                 builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
                 builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
@@ -492,9 +559,25 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                         cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 3,
                             MeshTopology.Triangles, 3, 1, properties);
                     }
+
+                    if (owner.UnscaledSceneDistortionEnabled)
+                    {
+                        if (owner.SurfaceDistortionEnabled || owner.OffsetSmearEnabled)
+                        {
+                            CoreUtils.SetRenderTarget(cmd, plan.history.sceneColorCopy);
+                            Blitter.BlitTexture(cmd, cameraColor, new Vector4(1, 1, 0, 0), 0, false);
+                        }
+
+                        CoreUtils.SetRenderTarget(cmd, cameraColor);
+                        var properties = Properties(plan, true, currentAnimationSample: true);
+                        properties.SetTexture(BlitTexture, plan.history.sceneColorCopy.rt);
+                        cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 4,
+                            MeshTopology.Triangles, 3, 1, properties);
+                    }
                 }
                 CoreUtils.SetRenderTarget(cmd, cameraColor);
-                cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 0, MeshTopology.Triangles, 3, 1, Properties(plan, true));
+                cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 0, MeshTopology.Triangles, 3, 1,
+                    Properties(plan, true, currentAnimationSample: owner.DebugThirdLayerMotion));
                 context.ExecuteCommandBuffer(cmd);
             }
             finally { CommandBufferPool.Release(cmd); }

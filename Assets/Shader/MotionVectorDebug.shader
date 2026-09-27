@@ -4,6 +4,9 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
     {
         [Enum(Direction,0,SignedRG,1,Speed,2,NoiseOverlay,3,NoiseOnly,4)] _DisplayMode ("Display Mode", Float) = 3
         _Sensitivity ("Sensitivity (UV displacement multiplier)", Range(1, 1000)) = 100
+        [Header(Motion Vector Source Debug)]
+        [ToggleUI] _DebugThirdLayerMotion ("Output Third Layer MV (Current Animation Sample)", Float) = 0
+        [ToggleUI] _DebugOtherLayersMotion ("Output Other Layers MV (Published Sample)", Float) = 0
         [Header(Motion Oriented Noise)]
         [ToggleUI] _NoiseOutputOnly ("Output Mapped Noise Only", Float) = 0
         _NoiseMap ("Noise Map (R)", 2D) = "gray" {}
@@ -27,6 +30,14 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         _OffsetSmearUVScale ("Offset Smear UV Scale", Vector) = (1, 1, 0, 0)
         _OffsetSmearPixels ("Offset Smear Distance (Pixels)", Range(-64, 64)) = 4
         _OffsetSmearAngle ("Offset Smear Map Angle Offset (Degrees)", Range(-180, 180)) = 0
+        [Header(Motion Oriented Unscaled Scene Distortion)]
+        [ToggleUI] _UnscaledSceneDistortionEnabled ("Enable Unscaled Scene Distortion", Float) = 1
+        _UnscaledSceneDistortionMap ("Unscaled Distortion Strength Map (R)", 2D) = "gray" {}
+        _UnscaledSceneDistortionThreshold ("Unscaled Distortion Map Cutoff", Range(0, 0.9)) = 0.2
+        _UnscaledSceneDistortionPixels ("Unscaled Distortion Distance (Pixels)", Range(-64, 64)) = 8
+        _UnscaledSceneDistortionAngle ("Unscaled Distortion Map Angle Offset (Degrees)", Range(-180, 180)) = 0
+        _UnscaledMotionMaskMinSpeed ("Unscaled Mask Start Speed (Pixels Per Frame)", Range(0, 32)) = 0.1
+        _UnscaledMotionMaskMaxSpeed ("Unscaled Mask Full Speed (Pixels Per Frame)", Range(0, 64)) = 2
     }
 
     SubShader
@@ -42,10 +53,13 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         TEXTURE2D(_NoiseMap);
         TEXTURE2D(_DistortionMap);
         TEXTURE2D(_OffsetSmearMap);
+        TEXTURE2D(_UnscaledSceneDistortionMap);
 
         CBUFFER_START(UnityPerMaterial)
             float _DisplayMode;
             float _Sensitivity;
+            float _DebugThirdLayerMotion;
+            float _DebugOtherLayersMotion;
             float4 _NoiseMap_ST;
             float4 _NoiseTint;
             float _NoiseOpacity;
@@ -64,6 +78,13 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             float4 _OffsetSmearUVScale;
             float _OffsetSmearPixels;
             float _OffsetSmearAngle;
+            float4 _UnscaledSceneDistortionMap_ST;
+            float _UnscaledSceneDistortionEnabled;
+            float _UnscaledSceneDistortionThreshold;
+            float _UnscaledSceneDistortionPixels;
+            float _UnscaledSceneDistortionAngle;
+            float _UnscaledMotionMaskMinSpeed;
+            float _UnscaledMotionMaskMaxSpeed;
         CBUFFER_END
 
         // Per-camera values are supplied through property blocks, never a shared
@@ -154,8 +175,8 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-                // Every display mode and the noise rotation use the same held
-                // signed UV displacement. Only the collection pass reads live MV.
+                // The renderer binds the third layer's current snapshot when
+                // requested; otherwise this is the other layers' published MV.
                 float2 motion;
                 if (_UseCachedMotionDirections > 0.5)
                     motion = SAMPLE_TEXTURE2D_X_LOD(
@@ -163,6 +184,12 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 else
                     motion = SAMPLE_TEXTURE2D_X_LOD(
                         _MotionVectorTexture, sampler_PointClamp, input.texcoord, 0).rg;
+
+                // Alpha=1 replaces the scene. Source debug takes precedence over
+                // Display Mode and noise-only output, with no noise/speed mask.
+                if (_DebugThirdLayerMotion > 0.5 || _DebugOtherLayersMotion > 0.5)
+                    return float4(saturate(0.5 + motion * max(_Sensitivity, 0.0)), 0.5, 1.0);
+
                 if (_DisplayMode > 2.5)
                     return MotionNoise(input, motion);
 
@@ -377,6 +404,59 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 // Blend the scaled/offset sample over the unscaled scene only
                 // where the first layer's distortion mask is empty.
                 return lerp(sceneColor, offsetColor, blend);
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Motion Oriented Unscaled Scene Distortion"
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend One Zero, Zero One
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment DistortSceneUnscaled
+
+            float4 DistortSceneUnscaled(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+                float2 screenSize = max(_ScaledScreenParams.xy, float2(1, 1));
+
+                // This pass is bound to the current animation sample MV(N),
+                // held between animation ticks. Sample it at the unscaled UV.
+                float2 motion = SAMPLE_TEXTURE2D_X_LOD(
+                    _CachedMotionDirections, sampler_PointClamp, input.texcoord, 0).rg;
+                float2 pixels = motion * screenSize;
+                float speed = length(pixels);
+                float2 direction = pixels / max(speed, 1e-6);
+                float2 mapDirection = speed > 0 ? direction : float2(1, 0);
+                float sine, cosine;
+                sincos(radians(_UnscaledSceneDistortionAngle), sine, cosine);
+                mapDirection = float2(cosine * mapDirection.x - sine * mapDirection.y,
+                                      sine * mapDirection.x + cosine * mapDirection.y);
+
+                float2 position = (input.positionCS.xy - 0.5 * screenSize) / screenSize.y;
+                float2 mapUV = RotateNoiseUV(position, mapDirection) * _UnscaledSceneDistortionMap_ST.xy
+                             + 0.5 + _UnscaledSceneDistortionMap_ST.zw;
+                float2 uvDx = RotateNoiseUV(ddx(position), mapDirection) * _UnscaledSceneDistortionMap_ST.xy;
+                float2 uvDy = RotateNoiseUV(ddy(position), mapDirection) * _UnscaledSceneDistortionMap_ST.xy;
+                float rawStrength = SAMPLE_TEXTURE2D_GRAD(
+                    _UnscaledSceneDistortionMap, sampler_LinearRepeat, mapUV, uvDx, uvDy).r;
+                float strength = saturate((rawStrength - _UnscaledSceneDistortionThreshold) /
+                                          max(1.0 - _UnscaledSceneDistortionThreshold, 1e-5));
+
+                float minimum = max(_UnscaledMotionMaskMinSpeed, 0.0);
+                float maximum = max(_UnscaledMotionMaskMaxSpeed, minimum + 0.001);
+                float motionMask = smoothstep(minimum, maximum, speed);
+                float2 offsetUV = direction *
+                    (_UnscaledSceneDistortionPixels * strength * motionMask) / screenSize;
+                float2 halfTexel = 0.5 / screenSize;
+                float2 sceneUV = clamp(input.texcoord - offsetUV, halfTexel, 1.0 - halfTexel);
+                return SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, sceneUV, 0);
             }
             ENDHLSL
         }

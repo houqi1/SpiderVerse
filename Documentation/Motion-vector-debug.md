@@ -41,6 +41,10 @@ LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 
 
 ## 输出含义
 
+材质的 **Motion Vector Source Debug** 有两个开关：**Output Third Layer MV (Current Animation Sample)** 显示第三层使用的 MV；**Output Other Layers MV (Published Sample)** 显示前两层使用的发布快照。Sync With Animation 下，第三层通常为当前动画采样 MV(N)，前两层为 MV(N−1)；Fixed Rate 下两者都显示发布快照。两个开关同时开启时，第三层开关优先。
+
+开启任一开关后会覆盖 Display Mode 和 Output Mapped Noise Only，以 Signed RG 显示对应的整张 MV：R=X、G=Y，零矢量为中性灰，Sensitivity 控制放大倍率。显示原始屏幕布局，不应用第二层的 UV 缩放或噪声/速度遮罩。MV 的采集和发布继续；开启时场景扭曲层不执行，关闭开关后恢复效果。调试图仍可能经过后续 URP 后处理，不是无损数据导出。
+
 | Display Mode | 显示 |
 | --- | --- |
 | Direction | 色相表示缓存运动方向，亮度表示缓存位移大小；缓存为零时为黑色。 |
@@ -68,7 +72,7 @@ LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 
 
 材质 **Motion Mask** 中的 **Mask Start Speed** 默认为 0.1 像素/帧，低于该值不生效；**Mask Full Speed** 默认为 2 像素/帧，达到该值完全生效，中间平滑过渡。相等或反向设置时，上限会在 Shader 中限制为至少比下限大 0.001，避免无效插值。这里使用采样帧的位移大小，不是按秒计算的速度；抽帧和连续动画可能需要不同参数。
 
-加色、NoiseOnly、Output Mapped Noise Only 和场景扭曲共用这一速度遮罩；Direction / SignedRG / Speed 调试输出仍显示缓存原始数据。黑白贴图的亮度继续独立相乘，黑色贡献为零、灰色按亮度贡献。遮罩筛选屏幕运动，也会包含相机移动引起的背景运动，不等于角色身份遮罩。
+加色、NoiseOnly、Output Mapped Noise Only 和前两层场景扭曲共用这一速度遮罩；Direction / SignedRG / Speed 调试输出仍显示缓存原始数据。加色层的黑色贡献为零、灰色按亮度贡献；第一层按 Distortion Map Cutoff 重映射为非负强度，第二层直接使用非负噪声值。遮罩筛选屏幕运动，也会包含相机移动引起的背景运动，不等于角色身份遮罩。
 
 NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 场景 RGB + 运动遮罩 × 旋转后纹理亮度 × Noise Tint.rgb × saturate(Add Intensity × Tint.a)`，保留场景 Alpha。开启下方的场景扭曲层时，先对本帧场景颜色副本进行偏移，再加上噪声颜色；关闭扭曲时，加色本身不需要复制场景。直接输出和调试模式仍替换场景 RGB。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Add Intensity，以显示灰度纹理。
 
@@ -78,42 +82,73 @@ NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 场景 RGB + 运动�
 
 | 参数 | 含义 |
 | --- | --- |
-| Enable Scene Distortion | 启用场景颜色偏移，默认开启。仅 NoiseOverlay 且 Output Mapped Noise Only 关闭时执行。 |
-| Distortion Strength Map (R) | 独立的强度贴图。按缓存 MV 方向旋转后取 R 通道：黑色为零，白色为完整偏移，灰色按比例。当前材质先使用 CharacterParticleNoise，可替换为另一张纹理。 |
+| Enable Scene Distortion | 启用第一层。仅 NoiseOverlay 且 Output Mapped Noise Only、MV 调试开关关闭时执行。 |
+| Distortion Strength Map (R) | 独立的强度贴图，按缓存 MV 方向旋转后采样 R 通道。原始采样值通过 R × 2 − 1 映射为有符号强度。 |
 | Tiling / Offset | 强度贴图独立的缩放和偏移，屏幕空间、Repeat 采样。 |
-| Distortion Distance (Pixels) | 最大偏移距离，默认 8 像素。正值使可见场景图案沿 MV 方向移动，负值反向，0 关闭偏移与颜色复制。 |
-| Distortion Map Angle Offset (Degrees) | 额外旋转强度贴图，默认 0；不改变场景偏移方向，也不影响加色层的 Noise Angle。 |
+| Distortion Distance (Pixels) | 两侧最大偏移距离，默认 8 像素。负值翻转两侧方向，0 关闭本层。 |
+| Distortion Map Angle Offset (Degrees) | 额外旋转强度贴图，不改变场景偏移方向。 |
 
-`偏移像素 = normalize(缓存 MV × 屏幕尺寸) × 强度贴图 R × Distortion Distance × 速度遮罩`
+`strength = saturate((noise.R - Distortion Map Cutoff) / (1 - Distortion Map Cutoff))`
+
+`偏移像素 = normalize(缓存 MV × 屏幕尺寸) × strength × Distortion Distance × 速度遮罩`
 
 `输出 RGB = SceneColor(UV − 偏移像素 / 屏幕尺寸) + 原有加色层`
 
-低于 Mask Start Speed 的像素不偏移。偏移方向和强度贴图的旋转都使用原有停帧缓存，遵循 Fixed Rate / Sync With Animation；MV 大小通过平滑速度遮罩控制偏移强度。强度贴图不使用加色层的 Contrast 或 Tint。屏幕边缘限制到有效采样区域。SceneColor 是本帧、该效果执行前的完整相机颜色（包含此前已绘制的透明物体），每帧重新复制，不累积历史颜色。Render Graph 使用临时颜色副本，兼容模式使用每相机颜色副本，后者随相机历史释放。
+Distance 为正时，只有高于 Cutoff 的噪声区域产生偏移，强度从 Cutoff 到 1 线性重映射到 0 到 1；低于 Cutoff 时不偏移。加色层仍使用原有的非负噪声亮度。
+
+低于 Mask Start Speed 的像素不偏移。方向、图案旋转与速度遮罩均使用发布的 MV 快照，遵循 Fixed Rate / Sync With Animation。SceneColor 为本帧该效果执行前的相机颜色，每帧复制，不累积历史颜色。屏幕边缘限制到有效采样区域。
 
 ## Motion Vector 偏移拖影层
 
-偏移拖影作为第二个独立层，在 **Motion Oriented Scene Distortion** 之后执行。它用缩放后的屏幕空间 UV 同时采样 SceneColor 和自己的噪声图；场景采样 UV 围绕屏幕中心缩放，UV Scale = (1, 1) 时不缩放。
+第二层在第一层之后执行，用缩放后的屏幕位置采样 Motion Vector、SceneColor 和自己的噪声图。场景采样 UV 围绕屏幕中心缩放，UV Scale=(1,1) 时不缩放。
 
 | 材质参数 | 含义 |
 | --- | --- |
-| Enable Offset Smear | 启用偏移拖影层，默认开启。关闭后只保留原有场景扭曲层。 |
-| Offset Smear Map (R) | 偏移拖影层自己的强度/噪声贴图。它也使用缩放后的 UV 采样；黑色不混入偏移颜色，白色允许完整混合。 |
-| Offset Smear UV Scale | 用于 SceneColor 与偏移噪声的屏幕空间 UV X/Y 缩放，(1, 1) 表示保持原始采样尺度。 |
-| Offset Smear Distance (Pixels) | 该层的最大运动偏移像素数，独立于原有 Distortion Distance。 |
-| Offset Smear Map Angle Offset (Degrees) | 该层噪声坐标额外旋转的角度，不会改变运动方向。 |
-| Distortion Map Cutoff | 第一层强度图的阈值。低于阈值视为无扭曲，可为第二层留出可叠加区域。 |
+| Enable Offset Smear | 启用第二层。 |
+| Offset Smear Map (R) | 独立噪声图，R 值直接作为非负偏移强度和混合权重。 |
+| Offset Smear UV Scale | SceneColor 与偏移噪声的屏幕 UV X/Y 缩放；MV 在同一缩放位置采样。 |
+| Offset Smear Distance (Pixels) | 两侧最大运动偏移像素数，独立于第一层；负值翻转方向。 |
+| Offset Smear Map Angle Offset (Degrees) | 噪声坐标额外旋转角度，不改变运动方向。 |
 
-偏移目标色与 Motion Vector 在同一个缩放后 UV 采样；再按该位置的运动方向计算偏移，使偏移采到的颜色跟随这个运动矢量。第二层噪声也基于缩放后的屏幕位置采样。Lerp 的底色仍取未缩放 UV 的 SceneColor，作为叠加底图。检查第一层遮罩时，将最终缩放并偏移后的场景 UV 反向除以 Offset Smear UV Scale，映射回未缩放屏幕 UV；再用这个对应位置的第一层噪声判断是否允许叠加。缩放分量接近零时按极小值保护，反算位置会限制在屏幕范围内。
+`offsetNoise = saturate(OffsetSmearMap.R)`
 
-`offsetUV = 0.5 + (screenUV − 0.5) × OffsetSmearUVScale − normalize(缓存 MV × 屏幕尺寸) × Offset Smear Map.R × Offset Smear Distance × 速度遮罩 / 屏幕尺寸`
+`offsetUV = 0.5 + (screenUV − 0.5) × UVScale − normalize(缓存 MV × 屏幕尺寸) × offsetNoise × OffsetSmearDistance × 速度遮罩 / 屏幕尺寸`
 
-`对应的未缩放 UV = 0.5 + (offsetUV − 0.5) / OffsetSmearUVScale`
+`对应的未缩放 UV = 0.5 + (offsetUV − 0.5) / UVScale`
 
-`blend = Offset Smear Map.R × 速度遮罩 × (对应未缩放 UV 的 Distortion Map.R <= Distortion Map Cutoff ? 1 : 0)`
+`originalDistortionPixels = DistortionDistance × (对应位置的 DistortionMap.R * 2 - 1) × 对应位置的速度遮罩`
+
+`allowOffsetSmear = (对应位置的 DistortionMap.R <= Distortion Map Cutoff) ? 1 : 0`
+
+`blend = saturate(offsetNoise × 速度遮罩 × allowOffsetSmear)`
 
 `输出 RGB = lerp(SceneColor(screenUV), SceneColor(offsetUV), blend)`
 
-对应位置的第一层 Distortion Map 强度高于阈值时，blend 为 0，不叠加第二层；否则用 Lerp 混合未缩放场景颜色与缩放并偏移后的场景颜色。第一层遮罩查询使用对应位置自己的缓存运动方向来旋转强度图。偏移拖影共享原有 MV 缓存、速度遮罩和屏幕边缘限制。两个拖影层同时开启时，第二层顺序处理第一层的输出；相较于仅启用一个拖影层，会多一次场景颜色复制和一次全屏绘制。
+第一层遮罩仍在反向映射回去的未缩放屏幕位置查询，并使用该位置的 MV 方向和速度。只要该位置的第一层噪声高于 Cutoff，就阻止第二层叠加；低于或等于 Cutoff 时允许叠加。第一层关闭、距离为零或速度遮罩为零时，第二层也允许叠加。第一层贴图若大部分区域高于 Cutoff 且存在运动，第二层可叠加区域就会较少。
+
+第二层使用非负 noise 控制沿 MV 方向的偏移，Lerp 权重也在 [0,1]；noise=0 时不做运动偏移，也不混入缩放后的颜色。场景采样与反向映射坐标均限制在屏幕内，缩放分量接近零时有除零保护。两个层均开启时，第二层处理第一层的输出，增加一次颜色复制和一次全屏绘制。
+
+## Motion Vector 未缩放场景扭曲层
+
+第三层在前两层之后执行，直接在未缩放的屏幕 UV 上采样 SceneColor，并按独立的强度贴图扭曲。它使用当前动画采样的 Motion Vector，而前两层继续使用发布的历史采样；Sync With Animation 下当前采样 MV(N) 会在动画采样之间保持，Fixed Rate 下则使用定时发布的快照。该层的速度遮罩、扭曲距离、噪声图和角度均可独立调整。
+
+| 材质参数 | 含义 |
+| --- | --- |
+| Enable Unscaled Scene Distortion | 启用第三层。仅 NoiseOverlay 且 Output Mapped Noise Only、MV 调试开关关闭时执行。 |
+| Unscaled Distortion Strength Map (R) | 独立的强度贴图，按当前 MV 方向旋转后采样 R 通道。 |
+| Tiling / Offset | 第三层强度贴图独立的缩放和偏移，屏幕空间、Repeat 采样。 |
+| Unscaled Distortion Map Cutoff | 强度阈值；低于阈值的区域不偏移，高于阈值后线性映射到完整强度。 |
+| Unscaled Distortion Distance (Pixels) | 最大偏移距离，默认 8 像素。负值翻转方向，0 关闭本层。 |
+| Unscaled Distortion Map Angle Offset (Degrees) | 额外旋转强度贴图，不改变场景偏移方向。 |
+| Unscaled Mask Start / Full Speed | 独立速度遮罩范围，单位为像素/采样帧。 |
+
+`strength = saturate((noise.R - cutoff) / (1 - cutoff))`
+
+`偏移像素 = normalize(当前动画采样 MV × 屏幕尺寸) × strength × Unscaled Distortion Distance × 独立速度遮罩`
+
+`输出 RGB = SceneColor(UV − 偏移像素 / 屏幕尺寸)`
+
+Sync With Animation 下，第三层使用当前姿势更新的 MV(N)，该纹理在后续保持姿势的渲染帧间保持不变；前两层仍使用发布的 MV(N−1)。没有新的动画采样时，第三层继续沿用最近一次采到的当前 MV，而不是每个渲染帧重新读取 Motion Vector。
 
 首次使用或历史重置时，无运动像素采用 Angle Offset 指定的默认方向。历史保存在屏幕空间，没有重投影或遮挡检测；持续移动的相机/物体可能让旧方向暂时落在新的表面或背景上，方向突变处也可能出现不连续。无限保持时这种旧方向可以一直保留，可以缩短 Reset After Seconds 或手动重置。这里旋转的是纹理采样坐标，不会随运动平流噪声。
 
