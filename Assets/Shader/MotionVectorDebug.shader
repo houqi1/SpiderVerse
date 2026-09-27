@@ -12,11 +12,21 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         _NoiseContrast ("Noise Contrast", Range(0, 4)) = 1.5
         _NoiseAngle ("Noise Angle Offset (Degrees)", Range(-180, 180)) = 0
         _MotionThreshold ("Direction Threshold (Pixels Per Frame)", Range(0.001, 5)) = 0.1
+        [Header(Motion Mask)]
+        _MotionMaskMinSpeed ("Mask Start Speed (Pixels Per Frame)", Range(0, 32)) = 0.1
+        _MotionMaskMaxSpeed ("Mask Full Speed (Pixels Per Frame)", Range(0, 64)) = 2
         [Header(Motion Oriented Scene Distortion)]
         [ToggleUI] _DistortionEnabled ("Enable Scene Distortion", Float) = 1
         _DistortionMap ("Distortion Strength Map (R)", 2D) = "gray" {}
+        _DistortionNoiseThreshold ("Distortion Map Cutoff", Range(0, 0.9)) = 0.2
         _DistortionPixels ("Distortion Distance (Pixels)", Range(-64, 64)) = 8
         _DistortionAngle ("Distortion Map Angle Offset (Degrees)", Range(-180, 180)) = 0
+        [Header(Motion Oriented Offset Smear)]
+        [ToggleUI] _OffsetSmearEnabled ("Enable Offset Smear", Float) = 1
+        [NoScaleOffset] _OffsetSmearMap ("Offset Smear Map (R)", 2D) = "gray" {}
+        _OffsetSmearUVScale ("Offset Smear UV Scale", Vector) = (1, 1, 0, 0)
+        _OffsetSmearPixels ("Offset Smear Distance (Pixels)", Range(-64, 64)) = 4
+        _OffsetSmearAngle ("Offset Smear Map Angle Offset (Degrees)", Range(-180, 180)) = 0
     }
 
     SubShader
@@ -31,6 +41,7 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         TEXTURE2D_X_FLOAT(_CachedMotionDirections);
         TEXTURE2D(_NoiseMap);
         TEXTURE2D(_DistortionMap);
+        TEXTURE2D(_OffsetSmearMap);
 
         CBUFFER_START(UnityPerMaterial)
             float _DisplayMode;
@@ -41,11 +52,18 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
             float _NoiseContrast;
             float _NoiseAngle;
             float _MotionThreshold;
+            float _MotionMaskMinSpeed;
+            float _MotionMaskMaxSpeed;
             float _NoiseOutputOnly;
             float4 _DistortionMap_ST;
             float _DistortionEnabled;
+            float _DistortionNoiseThreshold;
             float _DistortionPixels;
             float _DistortionAngle;
+            float _OffsetSmearEnabled;
+            float4 _OffsetSmearUVScale;
+            float _OffsetSmearPixels;
+            float _OffsetSmearAngle;
         CBUFFER_END
 
         // Per-camera values are supplied through property blocks, never a shared
@@ -55,6 +73,15 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
         float _CacheTime;
         float _HoldLastDirection;
         float _ResetDirectionAfter;
+
+        float MotionSpeedMask(float pixelSpeed)
+        {
+            // URP stores signed UV displacement with zero at (0, 0).
+            // Keep a nonzero transition width even for equal/reversed settings.
+            float minimum = max(_MotionMaskMinSpeed, 0.0);
+            float maximum = max(_MotionMaskMaxSpeed, minimum + 0.001);
+            return smoothstep(minimum, maximum, pixelSpeed);
+        }
 
         float2 RotateNoiseUV(float2 position, float2 direction)
         {
@@ -88,8 +115,8 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                 float threshold = max(_MotionThreshold, 0.001);
                 float2 direction = pixelSpeed >= threshold
                     ? motionPixels / max(pixelSpeed, 1e-6) : float2(1.0, 0.0);
-                // Select nonzero magnitude, including negative X/Y directions.
-                float motionMask = pixelSpeed > 0.0 ? 1.0 : 0.0;
+                // Speed controls coverage continuously, irrespective of direction sign.
+                float motionMask = MotionSpeedMask(pixelSpeed);
 
                 float sine, cosine;
                 sincos(radians(_NoiseAngle), sine, cosine);
@@ -239,16 +266,117 @@ Shader "Hidden/SpiderVerse/MotionVectorDebug"
                              + 0.5 + _DistortionMap_ST.zw;
                 float2 uvDx = RotateNoiseUV(ddx(position), mapDirection) * _DistortionMap_ST.xy;
                 float2 uvDy = RotateNoiseUV(ddy(position), mapDirection) * _DistortionMap_ST.xy;
-                float strength = saturate(SAMPLE_TEXTURE2D_GRAD(
-                    _DistortionMap, sampler_LinearRepeat, mapUV, uvDx, uvDy).r);
+                float rawStrength = SAMPLE_TEXTURE2D_GRAD(
+                    _DistortionMap, sampler_LinearRepeat, mapUV, uvDx, uvDy).r;
+                float strength = saturate((rawStrength - _DistortionNoiseThreshold) /
+                                          max(1.0 - _DistortionNoiseThreshold, 1e-5));
 
                 // Backward sampling moves visible features along the MV direction.
                 // Magnitude is controlled by the separate map and a pixel distance.
-                float2 offsetUV = direction * (_DistortionPixels * strength) / screenSize;
+                float2 offsetUV = direction * (_DistortionPixels * strength * MotionSpeedMask(speed)) / screenSize;
                 float2 halfTexel = 0.5 / screenSize;
                 float2 sceneUV = clamp(input.texcoord - offsetUV, halfTexel, 1.0 - halfTexel);
                 // _BlitTexture is a copy of this frame's scene BEFORE this effect.
                 return SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, sceneUV, 0);
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Motion Oriented Offset Smear"
+            Cull Off
+            ZWrite Off
+            ZTest Always
+            Blend One Zero, Zero One
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment DistortOffsetSmear
+
+            float4 DistortOffsetSmear(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+                float2 screenSize = max(_ScaledScreenParams.xy, float2(1, 1));
+                float2 uvScale = _OffsetSmearUVScale.xy;
+                float2 halfTexel = 0.5 / screenSize;
+                float2 scaledSceneUV = 0.5 + (input.texcoord - 0.5) * uvScale;
+                scaledSceneUV = clamp(scaledSceneUV, halfTexel, 1.0 - halfTexel);
+
+                // The sampled color and its motion vector must describe the same
+                // scaled screen-space location.
+                float2 motion = SAMPLE_TEXTURE2D_X_LOD(
+                    _CachedMotionDirections, sampler_PointClamp, scaledSceneUV, 0).rg;
+                float2 pixels = motion * screenSize;
+                float speed = length(pixels);
+                float2 direction = pixels / max(speed, 1e-6);
+                float2 mapDirection = speed > 0 ? direction : float2(1, 0);
+                float sine, cosine;
+                sincos(radians(_OffsetSmearAngle), sine, cosine);
+                mapDirection = float2(cosine * mapDirection.x - sine * mapDirection.y,
+                                      sine * mapDirection.x + cosine * mapDirection.y);
+
+                // Scale the screen-space noise pattern around the same center.
+                float2 position = (input.positionCS.xy - 0.5 * screenSize) / screenSize.y;
+                float2 scaledPosition = position * uvScale;
+                float2 rotatedPosition = RotateNoiseUV(scaledPosition, mapDirection);
+                float2 offsetNoiseUV = rotatedPosition + 0.5;
+                float2 scaledUVdx = RotateNoiseUV(ddx(scaledPosition), mapDirection);
+                float2 scaledUVdy = RotateNoiseUV(ddy(scaledPosition), mapDirection);
+                float offsetNoise = saturate(SAMPLE_TEXTURE2D_GRAD(
+                    _OffsetSmearMap, sampler_LinearRepeat,
+                    offsetNoiseUV, scaledUVdx, scaledUVdy).r);
+
+                float motionMask = MotionSpeedMask(speed);
+                float2 offsetUV = direction * (_OffsetSmearPixels * offsetNoise * motionMask) / screenSize;
+                float2 offsetSceneUV = clamp(scaledSceneUV - offsetUV, halfTexel, 1.0 - halfTexel);
+
+                // Undo the centered screen-UV scale to find the unscaled screen
+                // location represented by this scaled/offset scene sample.
+                // Guard zero scale components to avoid division by zero.
+                float2 safeUVScale = float2(
+                    abs(uvScale.x) > 1e-4 ? uvScale.x : (uvScale.x < 0 ? -1e-4 : 1e-4),
+                    abs(uvScale.y) > 1e-4 ? uvScale.y : (uvScale.y < 0 ? -1e-4 : 1e-4));
+                float2 correspondingUV = 0.5 + (offsetSceneUV - 0.5) / safeUVScale;
+                correspondingUV = clamp(correspondingUV, halfTexel, 1.0 - halfTexel);
+                float2 correspondingPosition = (correspondingUV * screenSize - 0.5 * screenSize)
+                                             / screenSize.y;
+                float originalNoise = 0.0;
+                if (_DistortionEnabled > 0.5 && abs(_DistortionPixels) > 0.0001)
+                {
+                    float2 correspondingMotion = SAMPLE_TEXTURE2D_X_LOD(
+                        _CachedMotionDirections, sampler_PointClamp, correspondingUV, 0).rg;
+                    float2 correspondingPixels = correspondingMotion * screenSize;
+                    float correspondingSpeed = length(correspondingPixels);
+                    float2 originalMapDirection = correspondingSpeed > 0
+                        ? correspondingPixels / max(correspondingSpeed, 1e-6)
+                        : float2(1, 0);
+                    sincos(radians(_DistortionAngle), sine, cosine);
+                    originalMapDirection = float2(cosine * originalMapDirection.x - sine * originalMapDirection.y,
+                                                  sine * originalMapDirection.x + cosine * originalMapDirection.y);
+                    float2 originalNoiseUV = RotateNoiseUV(correspondingPosition, originalMapDirection)
+                                           * _DistortionMap_ST.xy + 0.5 + _DistortionMap_ST.zw;
+                    float2 originalNoiseDx = RotateNoiseUV(ddx(correspondingPosition), originalMapDirection)
+                                           * _DistortionMap_ST.xy;
+                    float2 originalNoiseDy = RotateNoiseUV(ddy(correspondingPosition), originalMapDirection)
+                                           * _DistortionMap_ST.xy;
+                    float rawOriginalNoise = SAMPLE_TEXTURE2D_GRAD(
+                        _DistortionMap, sampler_LinearRepeat,
+                        originalNoiseUV, originalNoiseDx, originalNoiseDy).r;
+                    originalNoise = saturate((rawOriginalNoise - _DistortionNoiseThreshold) /
+                                             max(1.0 - _DistortionNoiseThreshold, 1e-5));
+                }
+                float allowOffsetSmear = 1.0 - step(0.00001, originalNoise);
+                float blend = saturate(offsetNoise * motionMask * allowOffsetSmear);
+
+                float4 sceneColor = SAMPLE_TEXTURE2D_X_LOD(
+                    _BlitTexture, sampler_LinearClamp, input.texcoord, 0);
+                float4 offsetColor = SAMPLE_TEXTURE2D_X_LOD(
+                    _BlitTexture, sampler_LinearClamp, offsetSceneUV, 0);
+                // Blend the scaled/offset sample over the unscaled scene only
+                // where the first layer's distortion mask is empty.
+                return lerp(sceneColor, offsetColor, blend);
             }
             ENDHLSL
         }

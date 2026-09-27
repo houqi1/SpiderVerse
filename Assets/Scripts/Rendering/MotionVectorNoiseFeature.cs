@@ -29,11 +29,22 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
     NoisePass pass;
     int revision;
 
-    bool SceneDistortionEnabled => passMaterial != null && passMaterial.passCount >= 3 &&
-        passMaterial.HasProperty("_DistortionEnabled") && passMaterial.GetFloat("_DistortionEnabled") > 0.5f &&
-        Mathf.Abs(passMaterial.GetFloat("_DistortionPixels")) > 0.0001f &&
+    bool CanDistortScene => passMaterial != null && passMaterial.HasProperty("_DisplayMode") &&
+        passMaterial.HasProperty("_NoiseOutputOnly") &&
         passMaterial.GetFloat("_DisplayMode") > 2.5f && passMaterial.GetFloat("_DisplayMode") < 3.5f &&
         passMaterial.GetFloat("_NoiseOutputOnly") < 0.5f;
+
+    bool SurfaceDistortionEnabled => CanDistortScene && passMaterial.passCount > 2 &&
+        passMaterial.HasProperty("_DistortionEnabled") && passMaterial.GetFloat("_DistortionEnabled") > 0.5f &&
+        passMaterial.HasProperty("_DistortionPixels") &&
+        Mathf.Abs(passMaterial.GetFloat("_DistortionPixels")) > 0.0001f;
+
+    bool OffsetSmearEnabled => CanDistortScene && passMaterial.passCount > 3 &&
+        passMaterial.HasProperty("_OffsetSmearEnabled") && passMaterial.GetFloat("_OffsetSmearEnabled") > 0.5f &&
+        passMaterial.HasProperty("_OffsetSmearPixels") &&
+        Mathf.Abs(passMaterial.GetFloat("_OffsetSmearPixels")) > 0.0001f;
+
+    bool SceneDistortionEnabled => SurfaceDistortionEnabled || OffsetSmearEnabled;
 
     public override void Create()
     {
@@ -348,22 +359,61 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                     builder.SetRenderFunc((CopyData d, RasterGraphContext context) =>
                         Blitter.BlitTexture(context.cmd, d.source, new Vector4(1, 1, 0, 0), 0, false));
                 }
-                using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Oriented Scene Distortion", out var data))
+
+                if (owner.SurfaceDistortionEnabled)
                 {
-                    data.material = owner.passMaterial;
-                    data.properties = Properties(plan, true);
-                    data.passIndex = 2;
-                    data.source = sceneCopy;
-                    builder.UseTexture(sceneCopy, AccessFlags.Read);
-                    builder.UseTexture(published, AccessFlags.Read);
-                    // The distortion replaces RGB and preserves destination alpha.
-                    builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
-                    builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
+                    using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Oriented Scene Distortion", out var data))
                     {
-                        d.properties.SetTexture(BlitTexture, d.source);
-                        context.cmd.DrawProcedural(Matrix4x4.identity, d.material, d.passIndex,
-                            MeshTopology.Triangles, 3, 1, d.properties);
-                    });
+                        data.material = owner.passMaterial;
+                        data.properties = Properties(plan, true);
+                        data.passIndex = 2;
+                        data.source = sceneCopy;
+                        builder.UseTexture(sceneCopy, AccessFlags.Read);
+                        builder.UseTexture(published, AccessFlags.Read);
+                        // The distortion replaces RGB and preserves destination alpha.
+                        builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
+                        builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
+                        {
+                            d.properties.SetTexture(BlitTexture, d.source);
+                            context.cmd.DrawProcedural(Matrix4x4.identity, d.material, d.passIndex,
+                                MeshTopology.Triangles, 3, 1, d.properties);
+                        });
+                    }
+                }
+
+                if (owner.OffsetSmearEnabled)
+                {
+                    TextureHandle offsetScene = sceneCopy;
+                    if (owner.SurfaceDistortionEnabled)
+                    {
+                        sceneDesc.name = "Motion Offset Smear Scene Copy";
+                        offsetScene = renderGraph.CreateTexture(sceneDesc);
+                        using (var builder = renderGraph.AddRasterRenderPass<CopyData>("Copy Scene For Offset Smear", out var data))
+                        {
+                            data.source = resources.activeColorTexture;
+                            builder.UseTexture(data.source, AccessFlags.Read);
+                            builder.SetRenderAttachment(offsetScene, 0, AccessFlags.WriteAll);
+                            builder.SetRenderFunc((CopyData d, RasterGraphContext context) =>
+                                Blitter.BlitTexture(context.cmd, d.source, new Vector4(1, 1, 0, 0), 0, false));
+                        }
+                    }
+
+                    using (var builder = renderGraph.AddRasterRenderPass<DrawData>("Motion Oriented Offset Smear", out var data))
+                    {
+                        data.material = owner.passMaterial;
+                        data.properties = Properties(plan, true);
+                        data.passIndex = 3;
+                        data.source = offsetScene;
+                        builder.UseTexture(offsetScene, AccessFlags.Read);
+                        builder.UseTexture(published, AccessFlags.Read);
+                        builder.SetRenderAttachment(resources.activeColorTexture, 0, AccessFlags.ReadWrite);
+                        builder.SetRenderFunc((DrawData d, RasterGraphContext context) =>
+                        {
+                            d.properties.SetTexture(BlitTexture, d.source);
+                            context.cmd.DrawProcedural(Matrix4x4.identity, d.material, d.passIndex,
+                                MeshTopology.Triangles, 3, 1, d.properties);
+                        });
+                    }
                 }
             }
 
@@ -417,10 +467,31 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                         FilterMode.Bilinear, TextureWrapMode.Clamp, name: "Motion Distortion Scene Copy");
                     CoreUtils.SetRenderTarget(cmd, plan.history.sceneColorCopy);
                     Blitter.BlitTexture(cmd, cameraColor, new Vector4(1, 1, 0, 0), 0, false);
-                    CoreUtils.SetRenderTarget(cmd, cameraColor);
-                    var properties = Properties(plan, true);
-                    properties.SetTexture(BlitTexture, plan.history.sceneColorCopy.rt);
-                    cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 2, MeshTopology.Triangles, 3, 1, properties);
+
+                    if (owner.SurfaceDistortionEnabled)
+                    {
+                        CoreUtils.SetRenderTarget(cmd, cameraColor);
+                        var properties = Properties(plan, true);
+                        properties.SetTexture(BlitTexture, plan.history.sceneColorCopy.rt);
+                        cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 2,
+                            MeshTopology.Triangles, 3, 1, properties);
+                    }
+
+                    if (owner.OffsetSmearEnabled)
+                    {
+                        if (owner.SurfaceDistortionEnabled)
+                        {
+                            // The second layer samples the result of the first layer.
+                            CoreUtils.SetRenderTarget(cmd, plan.history.sceneColorCopy);
+                            Blitter.BlitTexture(cmd, cameraColor, new Vector4(1, 1, 0, 0), 0, false);
+                        }
+
+                        CoreUtils.SetRenderTarget(cmd, cameraColor);
+                        var properties = Properties(plan, true);
+                        properties.SetTexture(BlitTexture, plan.history.sceneColorCopy.rt);
+                        cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 3,
+                            MeshTopology.Triangles, 3, 1, properties);
+                    }
                 }
                 CoreUtils.SetRenderTarget(cmd, cameraColor);
                 cmd.DrawProcedural(Matrix4x4.identity, owner.passMaterial, 0, MeshTopology.Triangles, 3, 1, Properties(plan, true));

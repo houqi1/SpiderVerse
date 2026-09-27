@@ -46,7 +46,7 @@ LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 
 | Direction | 色相表示缓存运动方向，亮度表示缓存位移大小；缓存为零时为黑色。 |
 | SignedRG | R 表示水平分量，G 表示垂直分量；`RG = saturate(0.5 + motion * Sensitivity)`，B 固定为 0.5。零运动输出中性灰。 |
 | Speed | `saturate(length(motion * Sensitivity))` 灰度图；缓存为零时为黑色。 |
-| NoiseOverlay | 取缓存运动矢量长度大于 0 的像素，将旋转纹理的白色亮度乘以指定颜色，再加到场景颜色。 |
+| NoiseOverlay | 按缓存运动矢量的像素速度生成平滑遮罩，将旋转纹理的白色亮度乘以遮罩和指定颜色，再加到场景颜色。 |
 | NoiseOnly | 单独显示旋转后的噪声灰度，便于观察方向。 |
 
 ## 屏幕空间噪声旋转
@@ -64,7 +64,11 @@ LineArtSteppedAnimator 在完成 Animator.Update 后记录实际采样序号及 
 | Noise Contrast | 噪声灰度围绕 0.5 调整对比度。 |
 | Noise Angle Offset | 在运动方向上增加角度偏移；原贴图纹理沿 Y 轴时可尝试 90 度。 |
 | Direction Threshold | 单位是像素/帧；低于此速度使用默认朝向，避免近零向量造成随机方向。 |
-运动遮罩始终开启，以缓存矢量长度大于 0 判断，向左或向下的负分量运动也包含在内。黑色贡献为零；灰色按亮度贡献，不进行硬阈值切割。
+运动遮罩始终开启：`speed = length(缓存 MV × 屏幕尺寸)`，`mask = smoothstep(Mask Start Speed, Mask Full Speed, speed)`。URP 原始 MV 的静止值为 (0,0)，不减去 0.5；向左或向下的负分量运动同样参与长度计算。
+
+材质 **Motion Mask** 中的 **Mask Start Speed** 默认为 0.1 像素/帧，低于该值不生效；**Mask Full Speed** 默认为 2 像素/帧，达到该值完全生效，中间平滑过渡。相等或反向设置时，上限会在 Shader 中限制为至少比下限大 0.001，避免无效插值。这里使用采样帧的位移大小，不是按秒计算的速度；抽帧和连续动画可能需要不同参数。
+
+加色、NoiseOnly、Output Mapped Noise Only 和场景扭曲共用这一速度遮罩；Direction / SignedRG / Speed 调试输出仍显示缓存原始数据。黑白贴图的亮度继续独立相乘，黑色贡献为零、灰色按亮度贡献。遮罩筛选屏幕运动，也会包含相机移动引起的背景运动，不等于角色身份遮罩。
 
 NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 场景 RGB + 运动遮罩 × 旋转后纹理亮度 × Noise Tint.rgb × saturate(Add Intensity × Tint.a)`，保留场景 Alpha。开启下方的场景扭曲层时，先对本帧场景颜色副本进行偏移，再加上噪声颜色；关闭扭曲时，加色本身不需要复制场景。直接输出和调试模式仍替换场景 RGB。Sensitivity 仅影响运动矢量调试模式，不影响噪声方向或阈值。NoiseOnly 忽略 Tint 和 Add Intensity，以显示灰度纹理。
 
@@ -80,11 +84,36 @@ NoiseOverlay 通过硬件加法混合实现：`结果 RGB = 场景 RGB + 运动�
 | Distortion Distance (Pixels) | 最大偏移距离，默认 8 像素。正值使可见场景图案沿 MV 方向移动，负值反向，0 关闭偏移与颜色复制。 |
 | Distortion Map Angle Offset (Degrees) | 额外旋转强度贴图，默认 0；不改变场景偏移方向，也不影响加色层的 Noise Angle。 |
 
-`偏移像素 = normalize(缓存 MV × 屏幕尺寸) × 强度贴图 R × Distortion Distance`
+`偏移像素 = normalize(缓存 MV × 屏幕尺寸) × 强度贴图 R × Distortion Distance × 速度遮罩`
 
 `输出 RGB = SceneColor(UV − 偏移像素 / 屏幕尺寸) + 原有加色层`
 
-零 MV 的像素不偏移。偏移方向和强度贴图的旋转都使用原有停帧缓存，遵循 Fixed Rate / Sync With Animation；MV 大小不再乘到偏移距离上。强度贴图不使用加色层的 Contrast 或 Tint。屏幕边缘限制到有效采样区域。SceneColor 是本帧、该效果执行前的完整相机颜色（包含此前已绘制的透明物体），每帧重新复制，不累积历史颜色。Render Graph 使用临时颜色副本，兼容模式使用每相机颜色副本，后者随相机历史释放。额外开销是一张颜色纹理、一次颜色复制和一次全屏扭曲绘制。
+低于 Mask Start Speed 的像素不偏移。偏移方向和强度贴图的旋转都使用原有停帧缓存，遵循 Fixed Rate / Sync With Animation；MV 大小通过平滑速度遮罩控制偏移强度。强度贴图不使用加色层的 Contrast 或 Tint。屏幕边缘限制到有效采样区域。SceneColor 是本帧、该效果执行前的完整相机颜色（包含此前已绘制的透明物体），每帧重新复制，不累积历史颜色。Render Graph 使用临时颜色副本，兼容模式使用每相机颜色副本，后者随相机历史释放。
+
+## Motion Vector 偏移拖影层
+
+偏移拖影作为第二个独立层，在 **Motion Oriented Scene Distortion** 之后执行。它用缩放后的屏幕空间 UV 同时采样 SceneColor 和自己的噪声图；场景采样 UV 围绕屏幕中心缩放，UV Scale = (1, 1) 时不缩放。
+
+| 材质参数 | 含义 |
+| --- | --- |
+| Enable Offset Smear | 启用偏移拖影层，默认开启。关闭后只保留原有场景扭曲层。 |
+| Offset Smear Map (R) | 偏移拖影层自己的强度/噪声贴图。它也使用缩放后的 UV 采样；黑色不混入偏移颜色，白色允许完整混合。 |
+| Offset Smear UV Scale | 用于 SceneColor 与偏移噪声的屏幕空间 UV X/Y 缩放，(1, 1) 表示保持原始采样尺度。 |
+| Offset Smear Distance (Pixels) | 该层的最大运动偏移像素数，独立于原有 Distortion Distance。 |
+| Offset Smear Map Angle Offset (Degrees) | 该层噪声坐标额外旋转的角度，不会改变运动方向。 |
+| Distortion Map Cutoff | 第一层强度图的阈值。低于阈值视为无扭曲，可为第二层留出可叠加区域。 |
+
+偏移目标色与 Motion Vector 在同一个缩放后 UV 采样；再按该位置的运动方向计算偏移，使偏移采到的颜色跟随这个运动矢量。第二层噪声也基于缩放后的屏幕位置采样。Lerp 的底色仍取未缩放 UV 的 SceneColor，作为叠加底图。检查第一层遮罩时，将最终缩放并偏移后的场景 UV 反向除以 Offset Smear UV Scale，映射回未缩放屏幕 UV；再用这个对应位置的第一层噪声判断是否允许叠加。缩放分量接近零时按极小值保护，反算位置会限制在屏幕范围内。
+
+`offsetUV = 0.5 + (screenUV − 0.5) × OffsetSmearUVScale − normalize(缓存 MV × 屏幕尺寸) × Offset Smear Map.R × Offset Smear Distance × 速度遮罩 / 屏幕尺寸`
+
+`对应的未缩放 UV = 0.5 + (offsetUV − 0.5) / OffsetSmearUVScale`
+
+`blend = Offset Smear Map.R × 速度遮罩 × (对应未缩放 UV 的 Distortion Map.R <= Distortion Map Cutoff ? 1 : 0)`
+
+`输出 RGB = lerp(SceneColor(screenUV), SceneColor(offsetUV), blend)`
+
+对应位置的第一层 Distortion Map 强度高于阈值时，blend 为 0，不叠加第二层；否则用 Lerp 混合未缩放场景颜色与缩放并偏移后的场景颜色。第一层遮罩查询使用对应位置自己的缓存运动方向来旋转强度图。偏移拖影共享原有 MV 缓存、速度遮罩和屏幕边缘限制。两个拖影层同时开启时，第二层顺序处理第一层的输出；相较于仅启用一个拖影层，会多一次场景颜色复制和一次全屏绘制。
 
 首次使用或历史重置时，无运动像素采用 Angle Offset 指定的默认方向。历史保存在屏幕空间，没有重投影或遮挡检测；持续移动的相机/物体可能让旧方向暂时落在新的表面或背景上，方向突变处也可能出现不连续。无限保持时这种旧方向可以一直保留，可以缩短 Reset After Seconds 或手动重置。这里旋转的是纹理采样坐标，不会随运动平流噪声。
 
