@@ -5,6 +5,10 @@ Shader "Custom/Toon"
         [MainTexture] _BaseMap ("Base Map", 2D) = "white" {}
         [MainColor] _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
 
+        [Header(Normal Map)]
+        [Normal] _BumpMap ("Normal Map", 2D) = "bump" {}
+        _BumpScale ("Normal Strength", Range(0, 2)) = 1
+
         [Header(Cel Diffuse)]
         _ShadeColor ("Shade Color", Color) = (0.4, 0.4, 0.5, 1)
         _ShadeThreshold ("Shade Threshold", Range(0, 1)) = 0.45
@@ -84,7 +88,7 @@ Shader "Custom/Toon"
             ZWrite On
 
             HLSLPROGRAM
-            #pragma target 2.0
+            #pragma target 3.0
             #pragma vertex ToonVert
             #pragma fragment ToonFrag
 
@@ -117,6 +121,7 @@ Shader "Custom/Toon"
             {
                 float4 positionOS : POSITION;
                 float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
                 float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
@@ -124,7 +129,7 @@ Shader "Custom/Toon"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 uv : TEXCOORD0;
+                float4 uv : TEXCOORD0; // xy: base map, zw: normal map.
                 float2 uvMap : TEXCOORD1;
                 float2 uvExtra : TEXCOORD2;
                 float2 uvSp : TEXCOORD3;
@@ -133,6 +138,7 @@ Shader "Custom/Toon"
                 float3 positionWS : TEXCOORD6;
                 float3 normalWS : TEXCOORD7;
                 float fogFactor : TEXCOORD8;
+                float4 tangentWS : TEXCOORD9;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -207,12 +213,14 @@ Shader "Custom/Toon"
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
                 VertexPositionInputs posInputs = GetVertexPositionInputs(input.positionOS.xyz);
-                VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS);
+                VertexNormalInputs normalInputs = GetVertexNormalInputs(input.normalOS, input.tangentOS);
 
                 output.positionCS = posInputs.positionCS;
                 output.positionWS = posInputs.positionWS;
                 output.normalWS = normalInputs.normalWS;
-                output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.tangentWS = float4(normalInputs.tangentWS, input.tangentOS.w * GetOddNegativeScale());
+                output.uv.xy = TRANSFORM_TEX(input.uv, _BaseMap);
+                output.uv.zw = TRANSFORM_TEX(input.uv, _BumpMap);
                 output.uvMap = TRANSFORM_TEX(input.uv, _UVMap);
                 output.uvExtra = TRANSFORM_TEX(input.uv, _ExtraMap);
                 output.uvSp = TRANSFORM_TEX(input.uv, _SpMap);
@@ -378,14 +386,19 @@ Shader "Custom/Toon"
                 half4 uvMapSample = SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uvMap);
                 half4 extraMapSample = SAMPLE_TEXTURE2D(_ExtraMap, sampler_ExtraMap, input.uvExtra);
                 half colorMask = SAMPLE_TEXTURE2D(_ColorMaskMap, sampler_ColorMaskMap, input.uvColorMask).r;
-                half3 normalWS = NormalizeNormalPerPixel(input.normalWS);
+                half3 normalTS = UnpackNormalScale(
+                    SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv.zw), _BumpScale);
+                // Reconstruct the signed tangent basis before evaluating any lighting.
+                float3 bitangentWS = input.tangentWS.w * cross(input.normalWS, input.tangentWS.xyz);
+                half3 normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(
+                    normalTS, half3x3(input.tangentWS.xyz, bitangentWS, input.normalWS)));
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS));
 
             #if defined(_LAMBERT_PERTURB_DEBUG)
                 // Debug: directly output the terminator-mapped Perturb Map.
                 return SampleLambertPerturbMap(normalWS, mainLight.direction);
             #else
-                half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+                half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv.xy);
                 half3 albedo = baseSample.rgb * _BaseColor.rgb;
                 half alpha = baseSample.a * _BaseColor.a;
 

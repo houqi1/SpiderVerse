@@ -106,6 +106,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         public Quaternion rotation;
         public Matrix4x4 projection;
         public float threshold;
+        public Vector4 noiseFlow, distortionFlow, offsetSmearFlow, unscaledDistortionFlow;
 
         public void Dispose()
         {
@@ -131,6 +132,14 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
         static readonly int CacheTime = Shader.PropertyToID("_CacheTime");
         static readonly int HoldDirection = Shader.PropertyToID("_HoldLastDirection");
         static readonly int ResetAfter = Shader.PropertyToID("_ResetDirectionAfter");
+        static readonly int NoiseFlowStep = Shader.PropertyToID("_NoiseFlowStep");
+        static readonly int DistortionFlowStep = Shader.PropertyToID("_DistortionFlowStep");
+        static readonly int OffsetSmearFlowStep = Shader.PropertyToID("_OffsetSmearFlowStep");
+        static readonly int UnscaledDistortionFlowStep = Shader.PropertyToID("_UnscaledDistortionFlowStep");
+        static readonly int NoiseFlowOffset = Shader.PropertyToID("_NoiseFlowOffset");
+        static readonly int DistortionFlowOffset = Shader.PropertyToID("_DistortionFlowOffset");
+        static readonly int OffsetSmearFlowOffset = Shader.PropertyToID("_OffsetSmearFlowOffset");
+        static readonly int UnscaledDistortionFlowOffset = Shader.PropertyToID("_UnscaledDistortionFlowOffset");
 
         public NoisePass(MotionVectorNoiseFeature owner)
         {
@@ -164,6 +173,7 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             public RTHandle previous, next;
             public bool collect, publish, reset, publishPrevious;
             public float time;
+            public Vector4 noiseFlow, distortionFlow, offsetSmearFlow, unscaledDistortionFlow;
         }
 
         FramePlan Prepare(Camera camera, RenderTextureDescriptor descriptor)
@@ -245,6 +255,21 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             bool publish = (reset || canCapture) &&
                 history.clock.Tick(now, frame, synchronized, generation, owner.updateRate, reset);
 
+            // Advance only when a sample is published, never on held render frames
+            // or fixed-rate candidate captures. Resets start at the original UVs.
+            if (reset)
+            {
+                history.noiseFlow = history.distortionFlow = Vector4.zero;
+                history.offsetSmearFlow = history.unscaledDistortionFlow = Vector4.zero;
+            }
+            else if (publish)
+            {
+                history.noiseFlow = AdvanceFlow(history.noiseFlow, NoiseFlowStep);
+                history.distortionFlow = AdvanceFlow(history.distortionFlow, DistortionFlowStep);
+                history.offsetSmearFlow = AdvanceFlow(history.offsetSmearFlow, OffsetSmearFlowStep);
+                history.unscaledDistortionFlow = AdvanceFlow(history.unscaledDistortionFlow, UnscaledDistortionFlowStep);
+            }
+
             var plan = new FramePlan
             {
                 history = history, previous = history.read, next = history.write,
@@ -256,7 +281,11 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
                 // On first use/reset there is no valid preceding sample.
                 publishPrevious = synchronized && !reset && history.hasSample,
                 time = (float)(now % 64.0),
-                publish = publish
+                publish = publish,
+                noiseFlow = history.noiseFlow,
+                distortionFlow = history.distortionFlow,
+                offsetSmearFlow = history.offsetSmearFlow,
+                unscaledDistortionFlow = history.unscaledDistortionFlow
             };
             if (plan.collect)
             {
@@ -282,6 +311,16 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             return plan;
         }
 
+        Vector4 AdvanceFlow(Vector4 offset, int stepProperty)
+        {
+            Vector4 step = owner.passMaterial.HasProperty(stepProperty)
+                ? owner.passMaterial.GetVector(stepProperty) : Vector4.zero;
+            // Repeat sampling is periodic. Wrap each tick to retain precision
+            // over long sessions, including with negative flow steps.
+            return new Vector4(Mathf.Repeat(offset.x + step.x, 1f),
+                Mathf.Repeat(offset.y + step.y, 1f), 0f, 0f);
+        }
+
         static bool ProjectionChanged(Matrix4x4 a, Matrix4x4 b)
         {
             for (int i = 0; i < 16; i++) if (Mathf.Abs(a[i] - b[i]) > 0.01f) return true;
@@ -295,6 +334,11 @@ public sealed class MotionVectorNoiseFeature : ScriptableRendererFeature
             properties.SetFloat(UseCache, composite ? 1 : 0);
             if (composite)
             {
+                // Capture offsets in the draw's property block for both render paths.
+                properties.SetVector(NoiseFlowOffset, plan.noiseFlow);
+                properties.SetVector(DistortionFlowOffset, plan.distortionFlow);
+                properties.SetVector(OffsetSmearFlowOffset, plan.offsetSmearFlow);
+                properties.SetVector(UnscaledDistortionFlowOffset, plan.unscaledDistortionFlow);
                 // The unscaled layer uses MV(N) immediately on animation tick N,
                 // then holds that snapshot until the next tick. Fixed-rate mode
                 // still uses the published snapshot to respect its update rate.

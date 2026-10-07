@@ -6,6 +6,8 @@
 
 TEXTURE2D(_BaseMap);
 SAMPLER(sampler_BaseMap);
+TEXTURE2D(_BumpMap);
+SAMPLER(sampler_BumpMap);
 TEXTURE2D(_LambertPerturbMap);
 SAMPLER(sampler_LambertPerturbMap);
 TEXTURE2D(_UVMap);
@@ -21,6 +23,7 @@ SAMPLER(sampler_DetailMap);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;
+    float4 _BumpMap_ST;
     float4 _LambertPerturbMap_ST;
     float4 _UVMap_ST;
     float4 _ExtraMap_ST;
@@ -28,6 +31,7 @@ CBUFFER_START(UnityPerMaterial)
     float4 _ColorMaskMap_ST;
     float4 _DetailMap_ST;
     half4 _BaseColor;
+    half _BumpScale;
     half4 _ShadeColor;
     half4 _OverlayColorA;
     half4 _OverlayColorB;
