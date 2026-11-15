@@ -54,6 +54,9 @@ CBUFFER_START(UnityPerMaterial)
     half _OutputWrapLambert;
     half _OutputWrapToonBase;
     half _DisableCelDiffuse;
+    half _CelWrapLambert;
+    half4 _CelWrapLambertColor;
+    half _CelWrapLambertStrength;
     half _OutputWrapNormalMap;
     half _AmbientStrength;
     half _LambertPerturbSpace;

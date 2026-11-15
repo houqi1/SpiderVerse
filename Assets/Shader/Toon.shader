@@ -29,6 +29,9 @@ Shader "Custom/Toon"
         _WrapToonStrength ("Wrap Toon Strength", Range(0, 1)) = 0
         [Toggle(_OUTPUT_WRAP_TOON)] _OutputWrapToon ("Output Wrap Toon", Float) = 0
         [Toggle(_OUTPUT_WRAP_LAMBERT)] _OutputWrapLambert ("Output Wrap Lambert", Float) = 0
+        [Toggle(_CEL_WRAP_LAMBERT_ON)] _CelWrapLambert ("Cel Diffuse Wrap Lambert Lerp (layer)", Float) = 0
+        _CelWrapLambertColor ("Cel Wrap Lambert Target Color (x Base Color)", Color) = (0.3, 0.3, 0.45, 1)
+        _CelWrapLambertStrength ("Cel Wrap Lambert Strength", Range(0, 1)) = 1
         [Toggle(_DISABLE_CEL_DIFFUSE)] _DisableCelDiffuse ("Disable Cel Diffuse (use flat Base Color)", Float) = 0
         [Toggle(_OUTPUT_WRAP_TOON_BASE)] _OutputWrapToonBase ("Output Wrap Toon x Base Color", Float) = 0
         [Toggle(_OUTPUT_WRAP_NORMAL_MAP)] _OutputWrapNormalMap ("Output Model Space Normal Map", Float) = 0
@@ -124,6 +127,7 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _OUTPUT_WRAP_LAMBERT
             #pragma shader_feature_local _OUTPUT_WRAP_TOON_BASE
             #pragma shader_feature_local _DISABLE_CEL_DIFFUSE
+            #pragma shader_feature_local _CEL_WRAP_LAMBERT_ON
             #pragma shader_feature_local _OUTPUT_WRAP_NORMAL_MAP
             #pragma shader_feature_local _OUTPUT_COLOR_MASK
             #pragma shader_feature_local _OUTPUT_DETAIL_MAP
@@ -511,10 +515,17 @@ Shader "Custom/Toon"
                 // Layer 3 + Base Map: wrap-toon factor multiplied onto Base Map * Base Color (full strength, no lighting/other layers).
                 return half4(albedo * wrapFactor, alpha);
             #else
-                // Final composite: UV Map → Wrap Toon → Color Mask → Detail → Fog.
+                // Final composite: Cel (lerp by Wrap Lambert) → UV Map → Wrap Toon → Color Mask → Detail → Fog.
             #if defined(_DISABLE_CEL_DIFFUSE)
                 // Cel diffuse (main/additional lights + ambient) off: start from the flat Base Map * Base Color.
                 color = albedo;
+            #endif
+            #if defined(_CEL_WRAP_LAMBERT_ON)
+                // Layer: wrap Lambert of the main light is the lerp factor toward the target color
+                // (lit side keeps the cel color, the wrapped-dark side goes to the target color).
+                half celWrapLambert = EvaluateWrapLambert(mainLight, wrapNormalWS);
+                half celWrapT = (1.0h - celWrapLambert) * saturate(_CelWrapLambertStrength);
+                color = lerp(color, _CelWrapLambertColor.rgb * albedo, celWrapT);
             #endif
                 color = BlendOverlayMap(color, uvMapSample, _OverlayBlendStrength);
                 color = BlendMultiplyLayer(color, wrapFactor, _WrapToonStrength);
