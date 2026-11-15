@@ -3,6 +3,7 @@ Shader "Custom/Toon"
     Properties
     {
         [MainTexture] _BaseMap ("Base Map", 2D) = "white" {}
+        [Enum(UV0, 0, UV1, 1)] _BaseMapUV ("Base Map UV", Float) = 0
         [MainColor] _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
 
         [Header(Normal Map)]
@@ -14,14 +15,23 @@ Shader "Custom/Toon"
         _ShadeThreshold ("Shade Threshold", Range(0, 1)) = 0.45
         _ShadeSmooth ("Shade Smooth", Range(0, 0.5)) = 0.02
         [Toggle(_SHADE_FROM_AMBIENT)] _ShadeFromAmbient ("Shade From Ambient", Float) = 0
+        [Toggle(_OUTPUT_CEL_DIFFUSE)] _OutputCelDiffuse ("Output Cel Diffuse", Float) = 0
 
         [Header(Wrap Toon Layer)]
+        [Toggle] _WrapNormalEnabled ("Use Model Space Normal", Float) = 0
+        _WrapNormalMap ("Model Space Normal (Linear RGB)", 2D) = "gray" {}
+        [Enum(UV0, 0, UV1, 1)] _WrapNormalUV ("Model Space Normal UV", Float) = 1
+        _WrapNormalStrength ("Model Space Normal Strength", Range(0, 1)) = 1
         _WrapShadeColor ("Wrap Shade Color", Color) = (0.4, 0.4, 0.5, 1)
         _WrapShadeThreshold ("Wrap Shade Threshold", Range(0, 1)) = 0.45
         _WrapShadeSmooth ("Wrap Shade Smooth", Range(0, 0.5)) = 0.02
         _WrapAmount ("Wrap Amount", Range(0, 1)) = 0.5
         _WrapToonStrength ("Wrap Toon Strength", Range(0, 1)) = 0
         [Toggle(_OUTPUT_WRAP_TOON)] _OutputWrapToon ("Output Wrap Toon", Float) = 0
+        [Toggle(_OUTPUT_WRAP_LAMBERT)] _OutputWrapLambert ("Output Wrap Lambert", Float) = 0
+        [Toggle(_DISABLE_CEL_DIFFUSE)] _DisableCelDiffuse ("Disable Cel Diffuse (use flat Base Color)", Float) = 0
+        [Toggle(_OUTPUT_WRAP_TOON_BASE)] _OutputWrapToonBase ("Output Wrap Toon x Base Color", Float) = 0
+        [Toggle(_OUTPUT_WRAP_NORMAL_MAP)] _OutputWrapNormalMap ("Output Model Space Normal Map", Float) = 0
 
         [Header(Ambient)]
         _AmbientStrength ("Ambient Strength", Range(0, 2)) = 0.35
@@ -35,8 +45,9 @@ Shader "Custom/Toon"
         [Toggle(_OUTPUT_OVERLAY_MAP)] _OutputOverlayMap ("Output UV Map", Float) = 0
 
         [Header(Extra Map)]
-        _ExtraMap ("Extra Map", 2D) = "white" {}
+        _ExtraMap ("Extra Map (R = hue shift, 0.5 = none)", 2D) = "gray" {}
         _ExtraDarkStrength ("Extra Dark Strength", Range(0, 1)) = 0
+        _ExtraHueShift ("Extra Hue Shift Max (turns)", Range(0, 0.5)) = 0.1
         [Toggle(_OUTPUT_EXTRA_MAP)] _OutputExtraMap ("Output Extra Map", Float) = 0
 
         [Header(SP Map)]
@@ -104,11 +115,16 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _LAMBERTPERTURBSPACE_WORLD _LAMBERTPERTURBSPACE_OBJECT
             #pragma shader_feature_local _LAMBERTPERTURBMODE_ADD _LAMBERTPERTURBMODE_MULTIPLY
             #pragma shader_feature_local _LAMBERT_PERTURB_SWAP_UV
+            #pragma shader_feature_local _OUTPUT_CEL_DIFFUSE
             #pragma shader_feature_local _OUTPUT_OVERLAY_MAP
             #pragma shader_feature_local _OUTPUT_EXTRA_MAP
             #pragma shader_feature_local _OUTPUT_SP_MAP
             #pragma shader_feature_local _SPMAPCHANNEL_R _SPMAPCHANNEL_G _SPMAPCHANNEL_B _SPMAPCHANNEL_A
             #pragma shader_feature_local _OUTPUT_WRAP_TOON
+            #pragma shader_feature_local _OUTPUT_WRAP_LAMBERT
+            #pragma shader_feature_local _OUTPUT_WRAP_TOON_BASE
+            #pragma shader_feature_local _DISABLE_CEL_DIFFUSE
+            #pragma shader_feature_local _OUTPUT_WRAP_NORMAL_MAP
             #pragma shader_feature_local _OUTPUT_COLOR_MASK
             #pragma shader_feature_local _OUTPUT_DETAIL_MAP
             #pragma shader_feature_local _OVERLAYBLENDMODE_MULTIPLY _OVERLAYBLENDMODE_ADD
@@ -123,6 +139,7 @@ Shader "Custom/Toon"
                 float3 normalOS : NORMAL;
                 float4 tangentOS : TANGENT;
                 float2 uv : TEXCOORD0;
+                float2 uv1 : TEXCOORD1;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -139,6 +156,7 @@ Shader "Custom/Toon"
                 float3 normalWS : TEXCOORD7;
                 float fogFactor : TEXCOORD8;
                 float4 tangentWS : TEXCOORD9;
+                float2 uvWrapNormal : TEXCOORD10;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -219,7 +237,10 @@ Shader "Custom/Toon"
                 output.positionWS = posInputs.positionWS;
                 output.normalWS = normalInputs.normalWS;
                 output.tangentWS = float4(normalInputs.tangentWS, input.tangentOS.w * GetOddNegativeScale());
-                output.uv.xy = TRANSFORM_TEX(input.uv, _BaseMap);
+                float2 baseUV = lerp(input.uv, input.uv1, saturate(_BaseMapUV));
+                float2 wrapUV = lerp(input.uv, input.uv1, saturate(_WrapNormalUV));
+                output.uv.xy = TRANSFORM_TEX(baseUV, _BaseMap);
+                output.uvWrapNormal = TRANSFORM_TEX(wrapUV, _WrapNormalMap);
                 output.uv.zw = TRANSFORM_TEX(input.uv, _BumpMap);
                 output.uvMap = TRANSFORM_TEX(input.uv, _UVMap);
                 output.uvExtra = TRANSFORM_TEX(input.uv, _ExtraMap);
@@ -243,12 +264,18 @@ Shader "Custom/Toon"
                 return litMask;
             }
 
-            // Wrap toon lit mask: wrap Lambert first, then cel + same perturb.
-            half EvaluateWrapToonLitMask(Light light, half3 normalWS)
+            // Wrap Lambert: N·L remapped so light wraps past the terminator, in [0, 1].
+            half EvaluateWrapLambert(Light light, half3 normalWS)
             {
                 half NdotL = dot(normalWS, light.direction);
                 half wrap = _WrapAmount;
-                half wrapped = saturate((NdotL + wrap) / (1.0h + wrap));
+                return saturate((NdotL + wrap) / (1.0h + wrap));
+            }
+
+            // Wrap toon lit mask: wrap Lambert first, then cel + same perturb.
+            half EvaluateWrapToonLitMask(Light light, half3 normalWS)
+            {
+                half wrapped = EvaluateWrapLambert(light, normalWS);
                 half attenuation = light.distanceAttenuation * light.shadowAttenuation;
                 half litMask = CelStep(wrapped * attenuation, _WrapShadeThreshold, _WrapShadeSmooth);
 
@@ -277,15 +304,28 @@ Shader "Custom/Toon"
             #endif
             }
 
-            // Pure wrap-toon factor (no albedo, no light.color) for multiply onto final color.
-            // Extra Map is multiply-blended only into the dark side.
-            half3 EvaluateWrapToonFactor(half wrapLitMask, half3 extraMapRgb, half3 wrapShadeColor)
+            // Rotate hue around the gray axis (1,1,1); angle in turns (1 = 360 degrees).
+            half3 HueRotate(half3 color, half turns)
             {
-                half3 darkColor = lerp(
-                    wrapShadeColor,
-                    wrapShadeColor * extraMapRgb,
-                    saturate(_ExtraDarkStrength));
-                return lerp(darkColor, half3(1.0h, 1.0h, 1.0h), saturate(wrapLitMask));
+                half angle = turns * 6.28318531h;
+                half s, c;
+                sincos(angle, s, c);
+                const half3 k = half3(0.57735027h, 0.57735027h, 0.57735027h);
+                return color * c + cross(k, color) * s + k * dot(k, color) * (1.0h - c);
+            }
+
+            // Pure wrap-toon factor (no albedo, no light.color) for multiply onto final color.
+            half3 EvaluateWrapToonFactor(half wrapLitMask, half3 wrapShadeColor)
+            {
+                return lerp(wrapShadeColor, half3(1.0h, 1.0h, 1.0h), saturate(wrapLitMask));
+            }
+
+            // Extra Map (R, 0.5 = neutral) hue-shifts the already shaded color, dark side only.
+            half3 ApplyExtraHueShift(half3 color, half extraR, half wrapLitMask)
+            {
+                half hueTurns = (extraR - 0.5h) * 2.0h * _ExtraHueShift;
+                half weight = saturate(_ExtraDarkStrength) * (1.0h - saturate(wrapLitMask));
+                return lerp(color, HueRotate(color, hueTurns), weight);
             }
 
             half3 BlendMultiplyLayer(half3 baseColor, half3 layerColor, half strength)
@@ -365,7 +405,10 @@ Shader "Custom/Toon"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-            #if defined(_OUTPUT_OVERLAY_MAP)
+            #if defined(_OUTPUT_WRAP_NORMAL_MAP)
+                // Direct output: raw Model Space Normal map RGB (linear, not unpacked), sampled with its UV set.
+                return half4(SAMPLE_TEXTURE2D(_WrapNormalMap, sampler_WrapNormalMap, input.uvWrapNormal).rgb, 1.0h);
+            #elif defined(_OUTPUT_OVERLAY_MAP)
                 // Direct output: UV Map sampled with model UV.
                 return SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uvMap);
             #elif defined(_OUTPUT_EXTRA_MAP)
@@ -392,25 +435,41 @@ Shader "Custom/Toon"
                 float3 bitangentWS = input.tangentWS.w * cross(input.normalWS, input.tangentWS.xyz);
                 half3 normalWS = NormalizeNormalPerPixel(TransformTangentToWorld(
                     normalTS, half3x3(input.tangentWS.xyz, bitangentWS, input.normalWS)));
+                // Dedicated linear RGB object-space atlas. Never use UnpackNormal here.
+                // A missing/disabled map falls back to the geometric normal.
+                float3 wrapNormalWS = NormalizeNormalPerPixel(input.normalWS);
+                if (_WrapNormalEnabled > 0.5h)
+                {
+                    float3 normalOS = SAMPLE_TEXTURE2D(_WrapNormalMap, sampler_WrapNormalMap, input.uvWrapNormal).rgb * 2.0 - 1.0;
+                    if (dot(normalOS, normalOS) > 1e-4)
+                    {
+                        float3 paintedNormalWS = TransformObjectToWorldNormal(normalize(normalOS));
+                        wrapNormalWS = SafeNormalize(lerp(wrapNormalWS, paintedNormalWS, saturate(_WrapNormalStrength)));
+                    }
+                }
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS));
 
             #if defined(_LAMBERT_PERTURB_DEBUG)
                 // Debug: directly output the terminator-mapped Perturb Map.
                 return SampleLambertPerturbMap(normalWS, mainLight.direction);
+            #elif defined(_OUTPUT_WRAP_LAMBERT)
+                // Debug: wrap Lambert of the main light as grayscale (before cel step / attenuation).
+                half wrapLambert = EvaluateWrapLambert(mainLight, wrapNormalWS);
+                return half4(wrapLambert, wrapLambert, wrapLambert, 1.0h);
             #else
                 half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv.xy);
                 half3 albedo = baseSample.rgb * _BaseColor.rgb;
                 half alpha = baseSample.a * _BaseColor.a;
 
                 half3 shadeColor = GetShadeColor(normalWS);
-                half3 wrapShadeColor = GetWrapShadeColor(normalWS);
+                half3 wrapShadeColor = GetWrapShadeColor(wrapNormalWS);
 
                 half3 viewDirWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
                 half3 color = ToonLightingMain(mainLight, albedo, normalWS, shadeColor);
                 color += SampleSH(normalWS) * albedo * _AmbientStrength;
 
                 // Combine wrap-toon lit masks across lights (any light can open the lit side).
-                half wrapLitMask = EvaluateWrapToonLitMask(mainLight, normalWS);
+                half wrapLitMask = EvaluateWrapToonLitMask(mainLight, wrapNormalWS);
 
             #if defined(_ADDITIONAL_LIGHTS)
                 InputData inputData;
@@ -428,25 +487,38 @@ Shader "Custom/Toon"
                     FORWARD_PLUS_SUBTRACTIVE_LIGHT_CHECK
                     Light light = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
                     color += ToonLightingAdditional(light, albedo, normalWS);
-                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, normalWS));
+                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, wrapNormalWS));
                 }
             #endif
 
                 LIGHT_LOOP_BEGIN(pixelLightCount)
                     Light light = GetAdditionalLight(lightIndex, inputData, shadowMask, aoFactor);
                     color += ToonLightingAdditional(light, albedo, normalWS);
-                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, normalWS));
+                    wrapLitMask = max(wrapLitMask, EvaluateWrapToonLitMask(light, wrapNormalWS));
                 LIGHT_LOOP_END
             #endif
 
-                half3 wrapFactor = EvaluateWrapToonFactor(wrapLitMask, extraMapSample.rgb, wrapShadeColor);
+                half3 wrapFactor = EvaluateWrapToonFactor(wrapLitMask, wrapShadeColor);
 
-            #if defined(_OUTPUT_WRAP_TOON)
+                // Solo-output one effect layer (mutually exclusive via keyword chain).
+            #if defined(_OUTPUT_CEL_DIFFUSE)
+                // Layer 1: cel lighting only (main + ambient + additional lights).
+                return half4(color, alpha);
+            #elif defined(_OUTPUT_WRAP_TOON)
+                // Layer 3: wrap-toon factor (Extra Map hue shift is applied afterwards, not shown here).
                 return half4(wrapFactor, alpha);
+            #elif defined(_OUTPUT_WRAP_TOON_BASE)
+                // Layer 3 + Base Map: wrap-toon factor multiplied onto Base Map * Base Color (full strength, no lighting/other layers).
+                return half4(albedo * wrapFactor, alpha);
             #else
-                // Final composite, then multiply wrap-toon factor onto the result.
+                // Final composite: UV Map → Wrap Toon → Color Mask → Detail → Fog.
+            #if defined(_DISABLE_CEL_DIFFUSE)
+                // Cel diffuse (main/additional lights + ambient) off: start from the flat Base Map * Base Color.
+                color = albedo;
+            #endif
                 color = BlendOverlayMap(color, uvMapSample, _OverlayBlendStrength);
                 color = BlendMultiplyLayer(color, wrapFactor, _WrapToonStrength);
+                color = ApplyExtraHueShift(color, extraMapSample.r, wrapLitMask);
                 color = ApplyColorMask(color, albedo, colorMask);
                 color *= SampleDetailStep(input.uvDetail);
                 color = MixFog(color, input.fogFactor);
