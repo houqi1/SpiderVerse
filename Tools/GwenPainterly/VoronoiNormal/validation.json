@@ -1,0 +1,54 @@
+{
+  "textures": {
+    "Gwen_VoronoiF20k_NormalOS_4K.png": "6efd73cd8d50f8386a555305dad6f0c0",
+    "Gwen_VoronoiF20k_NormalTS_4K.png": "cec35f1fb6f38a90b40d0c53d7768786"
+  },
+  "size": 4096,
+  "cells": 20000,
+  "relax": 0,
+  "nw": 3.0,
+  "seed": 7,
+  "margin": 20,
+  "supersample": 2,
+  "samples": 2500000,
+  "spacing_world_cm": 0.996463194071969,
+  "normal_coherence_mean": 0.9962918109046733,
+  "empty_cells": 0,
+  "covered_texels": 3891016,
+  "meshes": [
+    "hero_spidergwen01_s03_body_black_PainterlyUV",
+    "hero_spidergwen01_S03_body_pink_PainterlyUV",
+    "hero_spidergwen01_S03_body_white_PainterlyUV",
+    "hero_spidergwen01_S03_body_wristband_PainterlyUV",
+    "idle_head_PainterlyUV",
+    "wait_head_PainterlyUV"
+  ],
+  "seconds": 57.2,
+  "skin_check": {
+    "vertices": 13213,
+    "bind_pose_reference_flatten_deviation_deg": {
+      "mean": 9.289958029997395,
+      "p95": 28.795198170744666,
+      "over90_pct": 0.08325134337394989,
+      "over45_pct": 1.3471581018693712
+    },
+    "skinning_rotation_of_vertex_normal_deg": {
+      "mean": 37.61631643714498,
+      "p95": 73.11499546150206,
+      "over90_pct": 2.088851888291834,
+      "over45_pct": 33.63354272307576
+    },
+    "object_space_map_vs_skinned_vertex_normal": {
+      "mean": 39.39848056862878,
+      "p95": 78.54685474682546,
+      "over90_pct": 2.6943162037387425,
+      "over45_pct": 35.38182093392871
+    },
+    "tangent_space_map_vs_skinned_vertex_normal": {
+      "mean": 9.28995802980351,
+      "p95": 28.79519817074466,
+      "over90_pct": 0.08325134337394989,
+      "over45_pct": 1.3471581018693712
+    }
+  }
+}
