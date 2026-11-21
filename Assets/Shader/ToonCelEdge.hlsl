@@ -18,6 +18,14 @@ void ClipToonCelEdge(float3 generated, float3 normalWS, float3 positionWS, bool 
     float normalDiff = ToonNormalDifference(normalWS);
     float4 signals = LassylaEdgeSignals(generated, normalWS, positionWS, frontFace);
     float transparency = signals.w;
+    if (_NormalEdgeDebug > 0.5)
+    {
+        // Debug: show only the region selected by the normal-difference ramp
+        // (no fresnel, no noise, no strength scaling), as hard binary coverage.
+        float ndRange = max(_NormalEdgeEnd - _NormalEdgeStart, 1e-5);
+        clip(saturate((normalDiff - _NormalEdgeStart) / ndRange) - 0.5);
+        return;
+    }
     if (_NormalEdgeStrength > 0.0)
     {
         // Rebuild the fresnel ramp value (signals.y is the raw fresnel term) and

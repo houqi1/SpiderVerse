@@ -57,6 +57,7 @@ Shader "Custom/ToonCel"
         _NormalEdgeStrength ("Normal Difference Edge / Strength (0 = fresnel only)", Range(0,1)) = 0
         _NormalEdgeStart ("Normal Difference Edge / Black Position (screen-space normal change)", Range(0,2)) = 0.05
         _NormalEdgeEnd ("Normal Difference Edge / White Position", Range(0,2)) = 0.3
+        [ToggleUI] _NormalEdgeDebug ("Debug: Show Normal Difference Range Only", Float) = 0
         _NoiseStart ("Noise Ramp / Dark Position", Range(0,1)) = 0.23636361956596375
         _NoiseEnd ("Noise Ramp / White Position", Range(0,1)) = 0.5772733688354492
         _NoiseDark ("Noise Ramp / Dark Value (linear)", Range(0,1)) = 0.003952979110181332
