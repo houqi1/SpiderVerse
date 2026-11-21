@@ -31,6 +31,7 @@ CBUFFER_START(UnityPerMaterial)
     half _WrapNormalEnabled;
     half _WrapNormalUV;
     half _WrapNormalStrength;
+    half _WrapNormalTangentSpace;
     float4 _LambertPerturbMap_ST;
     float4 _UVMap_ST;
     float4 _ExtraMap_ST;
@@ -40,6 +41,11 @@ CBUFFER_START(UnityPerMaterial)
     half4 _BaseColor;
     half _BumpScale;
     half4 _ShadeColor;
+    half _CelModelNormalEnabled;
+    half4 _MidShadeColor;
+    half _MidShadeThreshold;
+    half4 _AmbientDarkColor;
+    half _AmbientDarkBlend;
     half4 _OverlayColorA;
     half4 _OverlayColorB;
     half4 _WrapShadeColor;

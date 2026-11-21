@@ -15,8 +15,12 @@ cannot transfer that renderer's particle budget onto a different renderer.
 The update kernel computes both shading normals and geometric triangle normals
 from the current deformed vertices. Distribution uses geometric normals; shading,
 normal offsets and existing camera fades retain their previous normals.
-Every rendering camera builds its own layer weight CDF using its current actual
-pose, independently of the stepped line-art camera. A front weight of zero gives
+Every rendering camera builds its own layer weight CDF using the same held camera
+position, forward direction and projection mode as line art. Camera data advances
+on Line Art's Update Rate, in sync with particle facing fades and silhouette size
+boosts. Surface deformation and rendering still update normally between camera
+samples; screen projection and color/depth sampling use the current render view.
+A front weight of zero gives
 zero weight to triangles whose absolute normal/view dot product is at least Width.
 The transition toward tangent triangles is smooth. This is an orientation-based
 distribution, not a screen-space outer-contour mask.
@@ -56,6 +60,47 @@ and CDF buffers to check the current Scene View's selected face orientations.
 It reports active layer settings, original/selected front-facing counts and global
 weight support. It does not save or change scene parameters.
 Report: `Temp/ParticleColorValidation/distribution-scene.txt`.
+
+## Triangle area sizing
+
+Each layer also offers `Size By Triangle Area` (off by default). When enabled,
+the square root of the current world-space triangle area replaces the random size
+factor and maps into the sorted `Particle Size` endpoints. The reference minimum
+and maximum are captured from nondegenerate triangles per renderer on rebuild;
+deformation can change sizes between those bounds without renormalizing the whole
+mesh each frame. Equal-area meshes use the midpoint. This is a relative mapping,
+not an absolute area-to-size multiplier. Silhouette redistribution preserves the
+selected triangle's size in this mode. With the switch off, original random sizes
+are retained. The camera silhouette size boost, if enabled, still applies afterwards.
+
+## Surface-aligned billboard rotation
+
+Each layer exposes `Align Billboard To Surface` (default off), `Billboard Surface
+Direction` (UV U or V, default V), `Billboard Rotation Offset` (-180 to 180 degrees),
+and `Billboard Rotation Follow Speed` (default 20). The billboard's local vertical
+axis follows the selected surface UV direction. The GPU reconstructs that direction
+from the current deformed triangle edges and UVs, then projects it into each camera's
+view plane. Degenerate UV triangles fall back to their longest of the two anchor edges.
+UV seams and differently oriented islands can produce different stroke directions;
+this does not infer anatomical flow independently of the UV layout.
+
+The quad stays camera-facing and its texture coordinates remain unchanged, so both
+the dot and noise atlas rotate together. Per-camera GPU angle histories retain the
+last orientation at a vanishing projection and smoothly approach valid directions.
+The initial fallback is upright. Rotation offsets are applied after smoothing.
+Perspective projection accounts for off-center anchors; orthographic views use
+the projected surface direction directly. Projection follows the current render
+view, like the billboard axes; the existing line-art-stepped facing/distribution
+camera data is unchanged. Redistribution uses the selected anchor's direction.
+
+The 80-byte particle layout is unchanged. Each candidate adds a 16-byte direction,
+each batch stores UVs (8 bytes/vertex), and active rotation stores 8 bytes per drawn
+particle per camera. Enabled rotation adds one compute dispatch per visible batch.
+Camera histories are released on batch rebuild/disposal and when cameras are destroyed.
+
+Run `SpiderVerse/Validate Surface Billboard Rotation` for GPU checks of deformed
+UV directions, orthographic/perspective projection, smoothing, and pole history.
+The report is written to `Temp/BillboardRotationValidation/gpu.txt`.
 
 ## Per-renderer counts
 

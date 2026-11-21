@@ -1,0 +1,41 @@
+#pragma kernel UpdateRotation
+struct SurfaceParticle
+{
+    float4 positionSize, color, normalWS, surfacePosition, distributionNormal;
+};
+StructuredBuffer<SurfaceParticle> _SurfaceParticles;
+#include "../../../Shader/SurfaceNoiseDistribution.hlsl"
+StructuredBuffer<float4> _SurfaceDirections;
+RWStructuredBuffer<float2> _SurfaceBillboardAxes;
+float4 _RotationCameraRight, _RotationCameraUp;
+float4 _RotationCameraPosition, _RotationCameraForward; // forward.w = orthographic
+float4 _RotationStep; // response factor, first update, unused, unused
+uint _RotationCount;
+
+[numthreads(64, 1, 1)]
+void UpdateRotation(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _RotationCount) return;
+    uint selected = SelectSurfaceDistributionIndex(id.x);
+    float3 direction = _SurfaceDirections[selected].xyz;
+    if (_RotationCameraForward.w < 0.5)
+    {
+        float3 ray = _SurfaceParticles[selected].surfacePosition.xyz - _RotationCameraPosition.xyz;
+        float depth = dot(ray, _RotationCameraForward.xyz);
+        if (abs(depth) < 1e-5) return;
+        // Perspective derivative in view-plane units, including off-axis anchors.
+        direction -= ray * (dot(direction, _RotationCameraForward.xyz) / depth);
+    }
+    float2 projected = float2(dot(direction, _RotationCameraRight.xyz), dot(direction, _RotationCameraUp.xyz));
+    float lengthSq = dot(projected, projected);
+    // The projection is undefined at the viewing pole. Preserve per-camera history.
+    if (lengthSq < 0.0004) return;
+    float2 target = projected * rsqrt(lengthSq);
+    float2 previous = _SurfaceBillboardAxes[id.x];
+    float angle = atan2(previous.x * target.y - previous.y * target.x, dot(previous, target));
+    float confidence = smoothstep(0.02, 0.1, sqrt(lengthSq));
+    float amount = _RotationStep.y > 0.5 ? 1.0 : _RotationStep.x * confidence;
+    float s, c;
+    sincos(angle * amount, s, c);
+    _SurfaceBillboardAxes[id.x] = float2(c * previous.x - s * previous.y, s * previous.x + c * previous.y);
+}

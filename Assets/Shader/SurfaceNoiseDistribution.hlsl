@@ -3,6 +3,7 @@
 float4 _SurfaceSilhouetteDistribution; // enabled, front weight, width, choices per particle
 float4 _SurfaceDistributionRange; // original offset, layer sample count, instance offset, layer instance count
 StructuredBuffer<uint> _SurfaceDistributionCdf;
+float _SurfaceSizeByTriangleArea;
 
 uint SelectSurfaceDistributionIndex(uint instanceID)
 {
@@ -34,7 +35,9 @@ SurfaceParticle SelectSurfaceDistributionParticle(uint instanceID)
     SurfaceParticle original = _SurfaceParticles[first];
     SurfaceParticle selected = _SurfaceParticles[SelectSurfaceDistributionIndex(instanceID)];
     selected.color = original.color;
-    selected.positionSize.w = original.positionSize.w;
+    // Area sizing belongs to the selected triangle, including cross-renderer moves.
+    if (_SurfaceSizeByTriangleArea < 0.5)
+        selected.positionSize.w = original.positionSize.w;
     return selected;
 }
 #endif

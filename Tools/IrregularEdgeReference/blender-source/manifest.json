@@ -1,0 +1,160 @@
+{
+  "commit": "e13b728c6880",
+  "files": [
+    {
+      "path": "source/blender/gpu/shaders/common/gpu_shader_common_hash.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/common/gpu_shader_common_hash.glsl",
+      "sha256": "e158725ba56bfda1ba7e26c4e0201fea6e8f73c6dff63eb795ed6b59f06468dc"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_noise.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_noise.glsl",
+      "sha256": "dcc93a96c6fffaa9aaed9cc607c3cb53160b6228ed63cb521dde2058f90af06a"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_fractal_noise.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_fractal_noise.glsl",
+      "sha256": "c007f3a60b02719ae08e33f1067b5188b83252a1c9de82dbf35fca0529cc5d5b"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_tex_noise.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_tex_noise.glsl",
+      "sha256": "70930dee777af5c9ecc6deb4ebbfc220059bc50ef0039bcb0751e37c71780048"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_fresnel.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_fresnel.glsl",
+      "sha256": "04d1a4ae0ae563ed064d72e845777b7f6668e88ac951b3e16a0570dc2230bacb"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_map_range.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_map_range.glsl",
+      "sha256": "cd176e93d84a45c0cedcd11230d0dcbcf6c148fceed732912bf3b364ef07ac94"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_mix_shader.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_mix_shader.glsl",
+      "sha256": "02de95a1b4121e689ffa15569062a0b2606186e59891bef565e77256c733f222"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_transparent.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_transparent.glsl",
+      "sha256": "796dec74c94cb736a5be655dfa600c270bfbcb72acdd11fe0877dd3019667d20"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_texture_coordinates.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_texture_coordinates.glsl",
+      "sha256": "43b4205a5163d7b00056e25bd850fac032c24c0de792455371206a7d239dd668"
+    },
+    {
+      "path": "source/blender/nodes/shader/nodes/node_shader_tex_noise.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/nodes/shader/nodes/node_shader_tex_noise.cc",
+      "sha256": "e9f6a8efecb78c9a75a3ca4adbb9e9e734601c827727d238d6de708a9f4a7930"
+    },
+    {
+      "path": "COPYING",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/COPYING",
+      "sha256": "19e6f4b541772f9d7b98a52bdbca3ebd5ef9e404956a9a6de68bfc3c1a178387"
+    },
+    {
+      "path": "source/blender/nodes/shader/nodes/node_shader_color_ramp.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/nodes/shader/nodes/node_shader_color_ramp.cc",
+      "sha256": "042a33e3f8da4f109bf7d73f894d7c77ecdb1f7d3e0e0ca4804d44fcdd5b7823"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/shaders/eevee_transparency.bsl.hh",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/shaders/eevee_transparency.bsl.hh",
+      "sha256": "6f5fa07da863bc7b42185e6dbcf07e40a671d2f4b910b689aa63cc314223a680"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/shaders/eevee_surf_depth.bsl.hh",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/shaders/eevee_surf_depth.bsl.hh",
+      "sha256": "8247202fcba1f79049bd66751a2c706bb7201031ed84805937734dcaf35e55c9"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/shaders/eevee_sampling_lib.bsl.hh",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/shaders/eevee_sampling_lib.bsl.hh",
+      "sha256": "3662bbb3184a600b5ce76b318c6cc770d91a49b7e7490150578814f6f783c461"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/shaders/eevee_surf_common.bsl.hh",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/shaders/eevee_surf_common.bsl.hh",
+      "sha256": "ee9f2593ac4b2a419825f23fd0eebb85a4cf4b92aa0dd8d1fce05ea11fcd5297"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/shaders/eevee_nodetree_closures_lib.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/shaders/eevee_nodetree_closures_lib.glsl",
+      "sha256": "7b498b786a57ccf0798928352798449999f2391987ad7f7b42eb77065a7b200e"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_rgb_to_bw.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_rgb_to_bw.glsl",
+      "sha256": "3b6f6b8e8cb22751bf5394c5ddc9db08d3d5861582ea1170e0d4401d96a1870f"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/eevee_sampling.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/eevee_sampling.cc",
+      "sha256": "014f3b2f6aa3c2b49e7b98d604aba9e8f518cd3a51acfaef6d18efc3a156d403"
+    },
+    {
+      "path": "source/blender/draw/engines/eevee/eevee_pipeline.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/engines/eevee/eevee_pipeline.cc",
+      "sha256": "a42400d65c3f7b3b62fca03c122b6fa5ef47aef84428ac94f2ab090715ab48eb"
+    },
+    {
+      "path": "source/blender/gpu/shaders/common/gpu_shader_common_color_utils.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/common/gpu_shader_common_color_utils.glsl",
+      "sha256": "d0e3a511fac437ce89b5436eca93f99760f50b1b7777ef13884f97df40b05da9"
+    },
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_mix_color.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/material/gpu_shader_material_mix_color.glsl",
+      "sha256": "490f54497dd0a6d866002d21949cda4226c704117a29ccf58acea0db9a1211c9"
+    },
+    {
+      "path": "source/blender/gpu/shaders/common/gpu_shader_common_color_ramp.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/common/gpu_shader_common_color_ramp.glsl",
+      "sha256": "f9e1bf0607bf687d56c66b8bed35ee2ef62bfb2e074bde3819bc8841ceba360b"
+    },
+    {
+      "path": "doc/license/GPL-license.txt",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/doc/license/GPL-license.txt",
+      "sha256": "f2703dec1b0118070caabd3302e21738c00211b0cc3260dbeb1168d6eda726b7"
+    },
+    {
+      "path": "source/blender/gpu/shaders/common/gpu_shader_common_math_utils.glsl",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/shaders/common/gpu_shader_common_math_utils.glsl",
+      "sha256": "d418489aa71d113f59455b0bf3e5663646dda59abd368cbf20f1d0936f87d9f0"
+    },
+    {
+      "path": "source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_lnor.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_lnor.cc",
+      "sha256": "073d2c2a0a8967986d682c0e3a373ee5547ccb739405c2125b073f1ee932e45b"
+    },
+    {
+      "path": "source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_vnor.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_vnor.cc",
+      "sha256": "523b59b98a1747f21b14aac36f1dea668e1472104e74c0ac403cd9ff0ab03f42"
+    },
+    {
+      "path": "source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_orco.cc",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/draw/intern/mesh_extractors/extract_mesh_vbo_orco.cc",
+      "sha256": "7e07a9689ef590cf455ea9e295fa607561a03d2558bca346af880704228ce820"
+    },
+    {
+      "path": "source/blender/gpu/GPU_attribute_convert.hh",
+      "url": "https://raw.githubusercontent.com/blender/blender/e13b728c6880/source/blender/gpu/GPU_attribute_convert.hh",
+      "sha256": "f2f1e4b54f9041f34258b2b26f1f6894fa8b24ba75b5f5e629ea5f238e150ad8"
+    }
+  ],
+  "unavailable": [
+    {
+      "path": "source/blender/gpu/shaders/material/gpu_shader_material_val_to_rgb.glsl",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "path": "source/blender/nodes/shader/nodes/node_shader_valToRgb.cc",
+      "error": "HTTP Error 404: Not Found"
+    }
+  ]
+}

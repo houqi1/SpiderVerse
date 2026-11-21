@@ -1,0 +1,39 @@
+{
+  "project": "C:\\Users\\win11\\Downloads\\Lassyla_Material (1).blend",
+  "fbx": "F:\\Projections\\SpiderVerse\\Assets\\Model\\Spider-Gwen.fbx",
+  "fbxSHA256": "10907f4bb8e72d81e7c1f093a6bc020639a5d7794f9b5ce4ef14e678476c3c09",
+  "material": "Lassyla Material",
+  "allImportedMeshes": [
+    "hero_spidergwen01_s03_body_black",
+    "hero_spidergwen01_S03_body_pink",
+    "hero_spidergwen01_S03_body_white",
+    "hero_spidergwen01_S03_body_wristband",
+    "idle head",
+    "Kingpin_wp003",
+    "Kingpin_wp02",
+    "spider_wp004",
+    "spider_wp005",
+    "wait head"
+  ],
+  "visibleMeshes": [
+    "hero_spidergwen01_s03_body_black",
+    "hero_spidergwen01_S03_body_pink",
+    "hero_spidergwen01_S03_body_white",
+    "hero_spidergwen01_S03_body_wristband",
+    "idle head"
+  ],
+  "bounds": [
+    [
+      -0.5401260852813721,
+      -0.14967215061187744,
+      0.03966201841831207
+    ],
+    [
+      0.5401263236999512,
+      0.16622109711170197,
+      1.8273835182189941
+    ]
+  ],
+  "nodeCount": 18,
+  "linkCount": 17
+}

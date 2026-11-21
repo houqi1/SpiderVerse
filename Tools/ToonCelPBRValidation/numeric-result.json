@@ -1,0 +1,8 @@
+{
+  "samples": 200000,
+  "reference": "Double-precision GGX + height-correlated Smith Lambda + Schlick Fresnel",
+  "max_relative_error": 7.954965557735998e-05,
+  "finite_nonnegative_brdf": true,
+  "bounded_geometry_and_shape_masks": true,
+  "zero_smoothness_and_grazing_checks": "PASS"
+}

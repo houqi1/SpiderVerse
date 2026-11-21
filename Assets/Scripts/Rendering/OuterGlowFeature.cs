@@ -14,6 +14,8 @@ using UnityEngine.Rendering.Universal;
 /// </summary>
 public class OuterGlowFeature : ScriptableRendererFeature
 {
+    public enum GlitchMode { SliceGlitch, RGBFlicker, NoiseDisplace }
+
     [Serializable]
     public class Settings
     {
@@ -28,6 +30,7 @@ public class OuterGlowFeature : ScriptableRendererFeature
         [Range(0f, 1f)] public float bloomKnee = 0.5f;
 
         [Header("Glow")]
+        public bool glowEnabled = true;
         [Range(0f, 8f)] public float intensity = 1.2f;
 
         [Tooltip("Vertical blur radius as a fraction of screen height.")]
@@ -77,6 +80,74 @@ public class OuterGlowFeature : ScriptableRendererFeature
 
         [Range(0, 2)] public int downsample = 1;
 
+        [Header("Character Glitch (Shared Character RT)")]
+        [Tooltip("Uses the same character capture and Layer Mask as glow. Keep only the target character on those layers. Scene occlusion is not applied.")]
+        public bool glitchEnabled = false;
+        public GlitchMode glitchMode = GlitchMode.SliceGlitch;
+        [Tooltip("Slice mode: overlay opacity. RGB mode: displacement strength; the split body is fully recomposed, not blended with a normal duplicate.")]
+        [Range(0f, 1f)] public float glitchOpacity = 0.7f;
+        [Tooltip("Maximum horizontal displacement as a fraction of screen width.")]
+        [Range(0f, 0.15f)] public float glitchDisplacement = 0.025f;
+        [Range(0f, 0.03f)] public float glitchRGBSplit = 0.003f;
+        [Tooltip("Slice height in full-resolution screen pixels.")]
+        [Range(1f, 128f)] public float glitchSliceHeight = 14f;
+        [Range(0f, 1f)] public float glitchSliceDensity = 0.3f;
+        [Tooltip("Fraction of time steps with a glitch burst.")]
+        [Range(0f, 1f)] public float glitchBurstProbability = 0.65f;
+        [Range(0f, 60f)] public float glitchUpdatesPerSecond = 12f;
+        [Tooltip("Opacity of a second displaced copy from this frame (no history buffer).")]
+        [Range(0f, 1f)] public float glitchEchoOpacity = 0.3f;
+        public int glitchSeed = 1;
+
+        [Header("RGB Flicker")]
+        [Tooltip("Sampled once per update (Updates Per Second, same interval as the Noise Displace noise; no screen UV). RG is remapped to (-1,1) and scales the red offset on X/Y; blue samples the same noise at a tick offset. Gray if empty (no offset).")]
+        public Texture2D rgbNoiseTexture;
+        [Tooltip("Noise sample UV advance per update.")]
+        public Vector2 rgbNoiseSpeed = new Vector2(0.17f, 0.11f);
+        [Tooltip("Ticks added to the tick used by the blue channel's noise sample.")]
+        public float rgbBlueTickOffset = 3f;
+        [Tooltip("Gate noise sampled by continuous time (R channel, no screen UV). Flicker is on while its value >= Gate Threshold. White if empty (always on).")]
+        public Texture2D rgbGateTexture;
+        [Tooltip("Gate noise sample UV advance per second.")]
+        public Vector2 rgbGateSpeed = new Vector2(0.2f, 0.13f);
+        [Tooltip("step(threshold, gate noise R): higher = flicker is on less often.")]
+        [Range(0f, 1f)] public float rgbGateThreshold = 0.5f;
+        [Tooltip("Maximum red screen displacement relative to the stationary green channel, in fractions of screen size, reached at noise value 1/-1.")]
+        public Vector2 rgbRedOffset = new Vector2(0.012f, 0.002f);
+        public Vector2 rgbBlueOffset = new Vector2(-0.012f, -0.002f);
+        [Tooltip("RGB Flicker only: draw the displaced colors only outside the character silhouette.")]
+        public bool rgbOutsideOnly = false;
+        [Tooltip("Tint of the displaced red-channel layer. Defaults reproduce the original channel split.")]
+        [ColorUsage(false, true)] public Color rgbRedColor = Color.red;
+        [Tooltip("Tint of the displaced blue-channel layer.")]
+        [ColorUsage(false, true)] public Color rgbBlueColor = Color.blue;
+
+        [Header("Noise Displace")]
+        [Tooltip("RG is remapped to (-1,1) and displaces the character; RGB is added on top of the displaced character. Gray if empty.")]
+        public Texture2D noiseTexture;
+        [Tooltip("Tiling (XY) and offset (ZW) of the noise in screen UV.")]
+        public Vector4 noiseST = new Vector4(1f, 1f, 0f, 0f);
+        [Tooltip("Displacement as a fraction of screen size at remapped noise value 1.")]
+        [Range(0f, 0.2f)] public float noiseDisplacement = 0.03f;
+        [Tooltip("Hue rotation of the displaced character, in turns, where noise B = 1 (0.5 gray noise gives half of this).")]
+        [Range(0f, 2f)] public float noiseHueShift = 1f;
+        [Tooltip("Noise UV scroll per update (Updates Per Second).")]
+        public Vector2 noiseScrollPerTick = new Vector2(0.05f, 0f);
+        [Tooltip("Second noise: RG is remapped to (-1,1) and multiplied onto the first remapped noise. Gray if empty (0 after remap).")]
+        public Texture2D noiseTexture2;
+        [Tooltip("Third texture: max-blended into the displaced character color before the hue shift. Black if empty (no effect).")]
+        public Texture2D noiseTexture3;
+        [Tooltip("Tiling of the third texture in screen UV.")]
+        [Min(0.01f)] public float noiseTiling3 = 1f;
+        [Tooltip("Third texture UV scroll per update (Updates Per Second), same rate as the first noise.")]
+        public Vector2 noiseScroll3PerTick = new Vector2(0.05f, 0f);
+        [Tooltip("Tiling (XY) and offset (ZW) of the second noise; applied to the time-driven sample UV, not screen UV.")]
+        public Vector4 noiseST2 = new Vector4(1f, 1f, 0f, 0f);
+        [Tooltip("Second noise sample UV = this * time in seconds (before tiling; no screen coordinates).")]
+        public Vector2 noiseSpeed2 = new Vector2(0.1f, 0.1f);
+        [Tooltip("Blend of the multiply: 0 = first noise unchanged, 1 = first noise multiplied by the second remapped noise.")]
+        [Range(0f, 1f)] public float noiseMultiplyStrength = 1f;
+
         public RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
 
         public Shader shader;
@@ -116,6 +187,8 @@ public class OuterGlowFeature : ScriptableRendererFeature
     {
         if (m_Pass == null || m_Material == null)
             return;
+        if (!settings.glowEnabled && (!settings.glitchEnabled || settings.glitchOpacity <= 0f))
+            return;
 
         CameraType cameraType = renderingData.cameraData.cameraType;
         if (cameraType != CameraType.Game && cameraType != CameraType.SceneView)
@@ -137,6 +210,31 @@ public class OuterGlowFeature : ScriptableRendererFeature
         const int kPrefilterPass = 0;
         const int kBlurPass = 1;
         const int kCompositePass = 2;
+        const int kGlitchPass = 3;
+        const int kRGBPass = 4;
+        const int kNoisePass = 5;
+        static readonly int s_NoiseParamsId = Shader.PropertyToID("_NoiseParams");
+        static readonly int s_NoiseSTId = Shader.PropertyToID("_NoiseST");
+        static readonly int s_NoiseScrollId = Shader.PropertyToID("_NoiseScroll");
+        static readonly int s_GlitchNoiseTexId = Shader.PropertyToID("_GlitchNoiseTex");
+        static readonly int s_GlitchNoiseTex2Id = Shader.PropertyToID("_GlitchNoiseTex2");
+        static readonly int s_NoiseSpeed2Id = Shader.PropertyToID("_NoiseSpeed2");
+        static readonly int s_NoiseST2Id = Shader.PropertyToID("_NoiseST2");
+        static readonly int s_GlitchNoiseTex3Id = Shader.PropertyToID("_GlitchNoiseTex3");
+        static readonly int s_NoiseTiling3Id = Shader.PropertyToID("_NoiseTiling3");
+        static readonly int s_NoiseScroll3Id = Shader.PropertyToID("_NoiseScroll3");
+        static readonly int s_RGBOffsetsId = Shader.PropertyToID("_RGBOffsets");
+        static readonly int s_RGBActiveId = Shader.PropertyToID("_RGBActive");
+        static readonly int s_RGBNoiseParamsId = Shader.PropertyToID("_RGBNoiseParams");
+        static readonly int s_RGBNoiseTexId = Shader.PropertyToID("_RGBNoiseTex");
+        static readonly int s_RGBGateParamsId = Shader.PropertyToID("_RGBGateParams");
+        static readonly int s_RGBGateTexId = Shader.PropertyToID("_RGBGateTex");
+        static readonly int s_RGBOutsideOnlyId = Shader.PropertyToID("_RGBOutsideOnly");
+        static readonly int s_RGBColorRId = Shader.PropertyToID("_RGBColorR");
+        static readonly int s_RGBColorBId = Shader.PropertyToID("_RGBColorB");
+        static readonly int s_GlitchParamsId = Shader.PropertyToID("_GlitchParams");
+        static readonly int s_GlitchTimingId = Shader.PropertyToID("_GlitchTiming");
+        static readonly int s_GlitchStyleId = Shader.PropertyToID("_GlitchStyle");
 
         static readonly int s_VerticalBlurId = Shader.PropertyToID("_VerticalBlur");
         static readonly int s_IntensityId = Shader.PropertyToID("_Intensity");
@@ -253,15 +351,112 @@ public class OuterGlowFeature : ScriptableRendererFeature
             if (!characterColor.IsValid() || !brightColor.IsValid() || !blurColor.IsValid())
                 return;
 
-            // Brightness filter first (bloom-style), then blur only the survivors.
-            renderGraph.AddBlitPass(
-                new RenderGraphUtils.BlitMaterialParameters(characterColor, brightColor, m_Material, kPrefilterPass),
-                "OuterGlow Brightness Prefilter");
-            renderGraph.AddBlitPass(
-                new RenderGraphUtils.BlitMaterialParameters(brightColor, blurColor, m_Material, kBlurPass),
-                "OuterGlow Blur Vertical");
+            if (m_Settings.glowEnabled)
+            {
+                // Brightness filter first (bloom-style), then blur only the survivors.
+                renderGraph.AddBlitPass(
+                    new RenderGraphUtils.BlitMaterialParameters(characterColor, brightColor, m_Material, kPrefilterPass),
+                    "OuterGlow Brightness Prefilter");
+                renderGraph.AddBlitPass(
+                    new RenderGraphUtils.BlitMaterialParameters(brightColor, blurColor, m_Material, kBlurPass),
+                    "OuterGlow Blur Vertical");
 
-            RecordCompositePass(renderGraph, cameraColor, characterColor, blurColor);
+                RecordCompositePass(renderGraph, cameraColor, characterColor, blurColor);
+            }
+            if (m_Settings.glitchEnabled && m_Settings.glitchOpacity > 0f)
+                RecordGlitchPass(renderGraph, cameraColor, characterColor, cameraData.cameraTargetDescriptor.height);
+        }
+
+        void RecordGlitchPass(RenderGraph graph, TextureHandle cameraColor, TextureHandle characterColor, int screenHeight)
+        {
+            using (var builder = graph.AddRasterRenderPass<GlitchPassData>("Character Glitch (Shared RT)", out var data))
+            {
+                data.material = m_Material;
+                data.characterColor = characterColor;
+                data.parameters = new Vector4(Mathf.Clamp01(m_Settings.glitchOpacity),
+                    Mathf.Max(0f, m_Settings.glitchDisplacement), Mathf.Max(0f, m_Settings.glitchRGBSplit),
+                    Mathf.Max(1f, m_Settings.glitchSliceHeight) / Mathf.Max(1, screenHeight));
+                data.timing = new Vector4((float)(Math.Floor(Time.realtimeSinceStartupAsDouble *
+                    Math.Max(0f, m_Settings.glitchUpdatesPerSecond)) % 65536.0),
+                    Mathf.Clamp01(m_Settings.glitchSliceDensity), Mathf.Clamp01(m_Settings.glitchBurstProbability),
+                    m_Settings.glitchSeed % 65536);
+                data.style = new Vector4(Mathf.Clamp01(m_Settings.glitchEchoOpacity),
+                    m_Material.GetVector(s_StabilizedAnchorUVId).y,
+                    m_Material.GetFloat(s_StabilizedEnabledId), 0f);
+                data.shaderPass = m_Settings.glitchMode == GlitchMode.RGBFlicker ? kRGBPass :
+                    m_Settings.glitchMode == GlitchMode.NoiseDisplace ? kNoisePass : kGlitchPass;
+                data.noiseTexture = m_Settings.noiseTexture != null ? m_Settings.noiseTexture : Texture2D.grayTexture;
+                data.noiseParams = new Vector4(Mathf.Max(0f, m_Settings.noiseDisplacement),
+                    Mathf.Max(0f, m_Settings.noiseHueShift), Mathf.Clamp01(m_Settings.noiseMultiplyStrength),
+                    (float)(Time.realtimeSinceStartupAsDouble % 65536.0));
+                data.noiseTexture2 = m_Settings.noiseTexture2 != null ? m_Settings.noiseTexture2 : Texture2D.grayTexture;
+                data.noiseSpeed2 = m_Settings.noiseSpeed2;
+                data.noiseST2 = m_Settings.noiseST2;
+                data.noiseTexture3 = m_Settings.noiseTexture3 != null ? m_Settings.noiseTexture3 : Texture2D.blackTexture;
+                data.noiseTiling3 = Mathf.Max(0.01f, m_Settings.noiseTiling3);
+                data.noiseScroll3 = m_Settings.noiseScroll3PerTick;
+                data.noiseScroll = m_Settings.noiseScrollPerTick;
+                data.noiseST = m_Settings.noiseST;
+                float rgbStrength = Mathf.Clamp01(m_Settings.glitchOpacity);
+                data.rgbOffsets = new Vector4(m_Settings.rgbRedOffset.x, m_Settings.rgbRedOffset.y,
+                    m_Settings.rgbBlueOffset.x, m_Settings.rgbBlueOffset.y) * rgbStrength;
+                data.rgbActive = data.rgbOffsets.sqrMagnitude > 1e-12f ? 1f : 0f;
+                data.rgbNoiseParams = new Vector4(m_Settings.rgbNoiseSpeed.x, m_Settings.rgbNoiseSpeed.y,
+                    m_Settings.rgbBlueTickOffset, 0f);
+                data.rgbGateParams = new Vector4(m_Settings.rgbGateSpeed.x, m_Settings.rgbGateSpeed.y,
+                    (float)(Time.realtimeSinceStartupAsDouble % 65536.0), m_Settings.rgbGateThreshold);
+                data.rgbGateTexture = m_Settings.rgbGateTexture != null ? m_Settings.rgbGateTexture : Texture2D.whiteTexture;
+                data.rgbNoiseTexture = m_Settings.rgbNoiseTexture != null ? m_Settings.rgbNoiseTexture : Texture2D.grayTexture;
+                data.rgbOutsideOnly = m_Settings.rgbOutsideOnly ? 1f : 0f;
+                data.rgbColorR = m_Settings.rgbRedColor;
+                data.rgbColorB = m_Settings.rgbBlueColor;
+                builder.UseTexture(characterColor, AccessFlags.Read);
+                builder.SetRenderAttachment(cameraColor, 0, AccessFlags.ReadWrite);
+                builder.SetRenderFunc(static (GlitchPassData pass, RasterGraphContext context) =>
+                {
+                    pass.material.SetVector(s_GlitchParamsId, pass.parameters);
+                    pass.material.SetVector(s_GlitchTimingId, pass.timing);
+                    pass.material.SetVector(s_GlitchStyleId, pass.style);
+                    pass.material.SetVector(s_RGBOffsetsId, pass.rgbOffsets);
+                    pass.material.SetVector(s_RGBNoiseParamsId, pass.rgbNoiseParams);
+                    pass.material.SetTexture(s_RGBNoiseTexId, pass.rgbNoiseTexture);
+                    pass.material.SetVector(s_RGBGateParamsId, pass.rgbGateParams);
+                    pass.material.SetTexture(s_RGBGateTexId, pass.rgbGateTexture);
+                    pass.material.SetFloat(s_RGBActiveId, pass.rgbActive);
+                    pass.material.SetFloat(s_RGBOutsideOnlyId, pass.rgbOutsideOnly);
+                    pass.material.SetColor(s_RGBColorRId, pass.rgbColorR);
+                    pass.material.SetColor(s_RGBColorBId, pass.rgbColorB);
+                    pass.material.SetVector(s_NoiseParamsId, pass.noiseParams);
+                    pass.material.SetVector(s_NoiseSTId, pass.noiseST);
+                    pass.material.SetVector(s_NoiseScrollId, pass.noiseScroll);
+                    pass.material.SetTexture(s_GlitchNoiseTexId, pass.noiseTexture);
+                    pass.material.SetVector(s_NoiseSpeed2Id, pass.noiseSpeed2);
+                    pass.material.SetVector(s_NoiseST2Id, pass.noiseST2);
+                    pass.material.SetTexture(s_GlitchNoiseTex3Id, pass.noiseTexture3);
+                    pass.material.SetFloat(s_NoiseTiling3Id, pass.noiseTiling3);
+                    pass.material.SetVector(s_NoiseScroll3Id, pass.noiseScroll3);
+                    pass.material.SetTexture(s_GlitchNoiseTex2Id, pass.noiseTexture2);
+                    Blitter.BlitTexture(context.cmd, pass.characterColor, new Vector4(1f, 1f, 0f, 0f), pass.material, pass.shaderPass);
+                });
+            }
+        }
+
+        sealed class GlitchPassData
+        {
+            public Material material;
+            public TextureHandle characterColor;
+            public Vector4 parameters, timing, style;
+            public Vector4 rgbOffsets, rgbNoiseParams, rgbGateParams;
+            public Texture2D rgbNoiseTexture, rgbGateTexture;
+            public float rgbActive;
+            public float rgbOutsideOnly;
+            public Color rgbColorR, rgbColorB;
+            public Vector4 noiseParams, noiseST, noiseST2;
+            public Vector2 noiseScroll, noiseSpeed2;
+            public Texture2D noiseTexture, noiseTexture2, noiseTexture3;
+            public float noiseTiling3;
+            public Vector2 noiseScroll3;
+            public int shaderPass;
         }
 
         void RecordCharacterPass(

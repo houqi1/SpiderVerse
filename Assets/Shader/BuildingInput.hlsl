@@ -14,6 +14,10 @@ TEXTURE2D(_Noise2Map);
 SAMPLER(sampler_Noise2Map);
 TEXTURE2D(_DissolveNoiseMap);
 SAMPLER(sampler_DissolveNoiseMap);
+TEXTURE2D(_DissolveMapYZ);
+SAMPLER(sampler_DissolveMapYZ);
+TEXTURE2D(_BrushShadowMap);
+SAMPLER(sampler_BrushShadowMap);
 
 CBUFFER_START(UnityPerMaterial)
     float4 _TriplanarMap_ST;
@@ -46,6 +50,8 @@ CBUFFER_START(UnityPerMaterial)
     half _Noise2FadeEnd;
     half _Noise2FadePower;
     float4 _DissolveNoiseMap_ST;
+    float4 _DissolveMapYZ_ST;
+    float _DissolveMapDivisor;
     half _DissolveProgress;
     float _DissolveYTop;
     float _DissolveYBottom;
@@ -61,6 +67,15 @@ CBUFFER_START(UnityPerMaterial)
     float _DistanceFogEnd;
     half _DistanceFogFalloff;
     half _DistanceFogMaxDensity;
+    float4 _BrushShadowMap_ST;
+    float4 _BrushInnerST;
+    float _BrushShadowDivisor;
+    half _BrushShadow;
+    half _OutputBrushShadow;
+    half _BrushEdgeRotation;
+    half _BrushEdgeDistort;
+    half _BrushInnerRotation;
+    half _BrushInnerStrength;
 CBUFFER_END
 
 #endif

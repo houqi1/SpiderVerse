@@ -1,0 +1,4 @@
+__pycache__/
+native-renders/
+server.stdout.log
+server.stderr.log

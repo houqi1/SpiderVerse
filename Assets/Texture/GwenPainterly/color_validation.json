@@ -1,0 +1,22 @@
+{
+  "resolution": 4096,
+  "brush_scale": 2.7,
+  "seam_brush_scale": 1.5,
+  "shared_color_normal_masks": true,
+  "seam_segments": 3684,
+  "seam_texels": 2050543,
+  "material_strokes": 460,
+  "uv_strokes": 6122,
+  "material_seams": {
+    "hero_spidergwen01_s03_body_black / hero_spidergwen01_S03_body_white": 227,
+    "hero_spidergwen01_S03_body_pink / hero_spidergwen01_S03_body_white": 125,
+    "hero_spidergwen01_S03_body_white / idle head": 6,
+    "idle head / idle head": 102
+  },
+  "normal_length_max_error": 1.1920928955078125e-07,
+  "alpha_preserved": true,
+  "encoded_normal_max_length_error": 2.574920654296875e-05,
+  "max_normal_change_degrees": 28.358592987060547,
+  "max_alpha_resample_error": 0.0,
+  "unity_check": "9 material bindings and 4096px sRGB color / linear model-space normal imports validated; shader imported without errors"
+}

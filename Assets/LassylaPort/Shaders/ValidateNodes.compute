@@ -1,0 +1,25 @@
+#pragma kernel EvaluateEdges
+#pragma kernel EvaluateGroups
+#define LASSYLA_COMPUTE
+#include "BlenderNodes.hlsl"
+StructuredBuffer<float4> Samples;
+RWStructuredBuffer<float4> Results;
+float4 RampMulBias;
+float FrontFace;
+[numthreads(64,1,1)]
+void EvaluateEdges(uint3 id:SV_DispatchThreadID) {
+    uint count,stride;Samples.GetDimensions(count,stride);if(id.x>=count)return;
+    float4 s=Samples[id.x];
+    Results[id.x]=Lassyla_edge(s.xyz,s.w,FrontFace>0.5,1.4500000476837158,float4(15,2,0.5,2),0,RampMulBias,0.003952979110181332);
+}
+[numthreads(64,1,1)]
+void EvaluateGroups(uint3 id:SV_DispatchThreadID) {
+    uint count,stride;Samples.GetDimensions(count,stride);if(id.x>=count)return;
+    float3 p=Samples[id.x].xyz,c0,p0,c1,p1;
+    Lassyla_blurry_voronoi(p,float4(1,0.20000000298023224,1,2.0999999046325684),c0,p0);
+    Lassyla_blurry_voronoi(p,float4(1,0.20000000298023224,1,3.599998712539673),c1,p1);
+    Results[id.x*6+0]=float4(c0,1);Results[id.x*6+1]=float4(p0,1);
+    Results[id.x*6+2]=float4(c1,1);Results[id.x*6+3]=float4(p1,1);
+    Results[id.x*6+4]=float4(Lassyla_noise_color(p,2,0.5,2),1);
+    Results[id.x*6+5]=Lassyla_noise_texture(p,1000,2,0.5,2,203.79998779296875);
+}

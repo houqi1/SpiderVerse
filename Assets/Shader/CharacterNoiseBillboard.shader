@@ -75,6 +75,7 @@ Shader "Custom/Character Noise Billboard"
             };
             StructuredBuffer<SurfaceParticle> _SurfaceParticles;
             #include "SurfaceNoiseDistribution.hlsl"
+            #include "SurfaceNoiseBillboardRotation.hlsl"
 
             Varyings Vert(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
             {
@@ -103,8 +104,9 @@ Shader "Custom/Character Noise Billboard"
                     influenceEnabled * saturate(_SurfaceCameraInfluence.y));
                 float silhouette = 1.0 - abs(facing);
                 float sizeMultiplier = 1.0 + silhouette * _SurfaceCameraInfluence.w * influenceEnabled;
+                float2 rotatedCorner = RotateSurfaceBillboardCorner(corner, instanceID);
                 float3 positionWS = p.positionSize.xyz +
-                    (right * corner.x + up * corner.y) * (p.positionSize.w * sizeMultiplier);
+                    (right * rotatedCorner.x + up * rotatedCorner.y) * (p.positionSize.w * sizeMultiplier);
                 output.positionCS = TransformWorldToHClip(positionWS);
                 output.uv = corner + 0.5;
                 output.color = p.color * _Color;

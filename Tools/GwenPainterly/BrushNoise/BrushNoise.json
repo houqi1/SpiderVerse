@@ -1,0 +1,37 @@
+{
+  "args": {
+    "size": 2048,
+    "seed": 7,
+    "name": "BrushNoise",
+    "out": "F:\\Projections\\SpiderVerse\\Tools\\GwenPainterly\\BrushNoise",
+    "source": null,
+    "noise_scale": 0.05,
+    "octaves": 3,
+    "coverage_density": 0.7,
+    "steps": 5,
+    "min_scale": 0.05,
+    "max_scale": 0.14,
+    "start_opacity": 0.4,
+    "end_opacity": 1.0,
+    "gaussian_sigma": 3.0,
+    "flow_sigma": 28.0,
+    "gradient_threshold": 0.0,
+    "rotation_offset": 0.0,
+    "random_rotation": 30.0,
+    "rotation_bins": 180,
+    "brush_folder": null,
+    "procedural_brushes": 12,
+    "stroke_tone": 0.25,
+    "stamp_jitter": 0.16,
+    "brush_aspect": 0.35,
+    "contrast": 1.0,
+    "no_equalize": false
+  },
+  "stamps": 2493,
+  "seam": {
+    "wrap_x": 0.011156509630382061,
+    "inner_x": 0.011649769730865955,
+    "wrap_y": 0.010569505393505096,
+    "inner_y": 0.011642184108495712
+  }
+}

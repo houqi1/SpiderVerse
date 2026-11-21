@@ -1,0 +1,119 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: hero_spidergwen01_S03_05_Painterly
+  m_Shader: {fileID: 4800000, guid: b4e8f1c2a9d74e6f8b3c5a7d1e0f2a34, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _LAMBERTPERTURBMODE_MULTIPLY
+  - _LAMBERTPERTURBSPACE_OBJECT
+  - _LAMBERT_PERTURB_ON
+  - _LAMBERT_PERTURB_SWAP_UV
+  - _OVERLAYBLENDMODE_MULTIPLY
+  - _SPMAPCHANNEL_A
+  m_InvalidKeywords:
+  - _SAMPLEMAPSPACE_WORLD
+  - _SAMPLE_MAP_ON
+  - _SAMPLE_MAP_SWAP_UV
+  - _UVMAPBLENDMODE_MULTIPLY
+  - _WRAPTOONBLENDMODE_MULTIPLY
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: 2000
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: c6bf9f531e6f4217aaec784908c49724, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 2800000, guid: e7f483f8c6c11e9418aae73cae86907c, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ColorMaskMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMap:
+        m_Texture: {fileID: 2800000, guid: e2fc0c5e8ee52394397d8df7d78947d0, type: 3}
+        m_Scale: {x: 0.01, y: 0.69}
+        m_Offset: {x: 0, y: 0}
+    - _ExtraMap:
+        m_Texture: {fileID: 2800000, guid: 7d76b48f71e64ff4982345a0bd9adde9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _LambertPerturbMap:
+        m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SpMap:
+        m_Texture: {fileID: 2800000, guid: c20028d904e041742bc6a7eb6595792d, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _UVMap:
+        m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _WrapNormalMap:
+        m_Texture: {fileID: 2800000, guid: 35f615cce8e6e2f43a546cbc4dfc97e6, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AmbientStrength: 0.77
+    - _BaseMapUV: 1
+    - _BumpScale: 1.06
+    - _ColorMaskMix: 0.5
+    - _ColorMaskStrength: 1
+    - _Cull: 2
+    - _DetailMapThreshold: 0.074
+    - _ExtraDarkStrength: 0
+    - _ExtraHueShift: 0
+    - _LambertPerturbDebug: 0
+    - _LambertPerturbMode: 1
+    - _LambertPerturbOn: 1
+    - _LambertPerturbSpace: 1
+    - _LambertPerturbStrength: 2.34
+    - _LambertPerturbSwapUV: 1
+    - _LambertPerturbWidth: 0.527
+    - _OutputCelDiffuse: 0
+    - _OutputColorMask: 0
+    - _OutputDetailMap: 0
+    - _OutputExtraMap: 0
+    - _OutputOverlayMap: 0
+    - _OutputSpMap: 0
+    - _OutputWrapLambert: 0
+    - _OutputWrapToon: 0
+    - _OverlayBlendMode: 0
+    - _OverlayBlendStrength: 0.716
+    - _ShadeFromAmbient: 0
+    - _ShadeSmooth: 0.054
+    - _ShadeThreshold: 0.345
+    - _SpMapChannel: 3
+    - _WrapAmount: 1
+    - _WrapNormalEnabled: 1
+    - _WrapNormalStrength: 1
+    - _WrapNormalUV: 1
+    - _WrapShadeSmooth: 0.02
+    - _WrapShadeThreshold: 0.139
+    - _WrapToonStrength: 1
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _OverlayColorA: {r: 0.96981126, g: 0.60189295, b: 0.21774992, a: 1}
+    - _OverlayColorB: {r: 1, g: 1, b: 1, a: 1}
+    - _ShadeColor: {r: 0.89433956, g: 0.55854034, b: 0.7684254, a: 1}
+    - _WrapShadeColor: {r: 0.93962264, g: 0.93962264, b: 0.93962264, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

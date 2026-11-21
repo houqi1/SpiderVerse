@@ -21,19 +21,21 @@ internal sealed class SurfaceNoiseGpu : IDisposable
 
     internal sealed class Batch : IDisposable
     {
-        internal GraphicsBuffer vertices, normals, anchors, particles;
+        internal GraphicsBuffer vertices, normals, anchors, particles, uvs;
+        internal readonly Dictionary<Camera, RotationState> rotations = new Dictionary<Camera, RotationState>();
         internal readonly Material sourceMaterial;
         internal readonly Material material;
         internal readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
         internal int anchorOffset;
         internal LayerPool pool;
+        internal GraphicsBuffer distributionCdf;
         internal int count;
         internal readonly int choiceCount;
         internal int anchorCount => count * choiceCount;
         internal int layerIndex;
         internal Bounds bounds;
         internal bool visible;
-        internal Batch(Material template, List<Anchor> data, int vertexCount, int layerIndex, int choiceCount)
+        internal Batch(Material template, List<Anchor> data, int vertexCount, int layerIndex, int choiceCount, Vector2[] surfaceUVs)
         {
             sourceMaterial = template;
             this.layerIndex = layerIndex;
@@ -49,10 +51,15 @@ internal sealed class SurfaceNoiseGpu : IDisposable
             normals = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vertexCount, 12);
             anchors = new GraphicsBuffer(GraphicsBuffer.Target.Structured, anchorCount, 48);
             anchors.SetData(data);
+            uvs = new GraphicsBuffer(GraphicsBuffer.Target.Structured, vertexCount, 8);
+            uvs.SetData(surfaceUVs);
         }
         public void Dispose()
         {
             vertices?.Dispose(); normals?.Dispose(); anchors?.Dispose();
+            uvs?.Dispose();
+            foreach (var state in rotations.Values) state.axes.Dispose();
+            rotations.Clear();
             if (material != null)
             {
                 if (Application.isPlaying) UnityEngine.Object.Destroy(material);
@@ -63,17 +70,27 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         }
     }
 
+    internal sealed class RotationState
+    {
+        internal GraphicsBuffer axes;
+        internal double lastUpdate;
+        internal bool initialized;
+    }
+
     internal sealed class LayerPool : IDisposable
     {
         internal readonly List<Batch> batches = new List<Batch>();
-        internal GraphicsBuffer particles, a, b;
+        internal GraphicsBuffer particles, a, b, directions;
         internal int sampleCount;
-        public void Dispose() { particles?.Dispose(); a?.Dispose(); b?.Dispose(); }
+        public void Dispose() { particles?.Dispose(); a?.Dispose(); b?.Dispose(); directions?.Dispose(); }
     }
     private readonly List<LayerPool> pools = new List<LayerPool>();
 
     private readonly ComputeShader compute;
     private readonly int kernel, weightsKernel, scanKernel;
+    private ComputeShader rotationCompute;
+    private int rotationKernel;
+    private readonly List<Camera> retiredCameras = new List<Camera>();
     private readonly List<Batch> batches = new List<Batch>();
     private static readonly int CameraPositionId = Shader.PropertyToID("_SurfaceCameraPosition");
     private static readonly int CameraForwardId = Shader.PropertyToID("_SurfaceCameraForward");
@@ -89,9 +106,9 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         scanKernel = compute.FindKernel("ScanDistributionWeights");
     }
 
-    internal Batch AddBatch(Material template, List<Anchor> anchors, int vertexCount, int layerIndex, int choiceCount)
+    internal Batch AddBatch(Material template, List<Anchor> anchors, int vertexCount, int layerIndex, int choiceCount, Vector2[] surfaceUVs)
     {
-        var batch = new Batch(template, anchors, vertexCount, layerIndex, choiceCount);
+        var batch = new Batch(template, anchors, vertexCount, layerIndex, choiceCount, surfaceUVs);
         batches.Add(batch);
         return batch;
     }
@@ -127,6 +144,7 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         foreach (var pool in pools)
         {
             pool.particles = new GraphicsBuffer(GraphicsBuffer.Target.Structured, pool.sampleCount, 80);
+            pool.directions = new GraphicsBuffer(GraphicsBuffer.Target.Structured, pool.sampleCount, 16);
             pool.a = new GraphicsBuffer(GraphicsBuffer.Target.Structured, pool.sampleCount, 4);
             pool.b = new GraphicsBuffer(GraphicsBuffer.Target.Structured, pool.sampleCount, 4);
             foreach (var batch in pool.batches)
@@ -134,12 +152,16 @@ internal sealed class SurfaceNoiseGpu : IDisposable
                 batch.particles = pool.particles;
                 batch.properties.SetBuffer("_SurfaceParticles", pool.particles);
                 batch.properties.SetBuffer("_SurfaceDistributionCdf", pool.a);
+                // Bind a valid resource even when the rotation branch is disabled.
+                batch.properties.SetBuffer("_SurfaceBillboardAxes", pool.directions);
             }
         }
     }
 
     internal void Update(Batch batch, List<Vector3> vertices, List<Vector3> normals,
-        Matrix4x4 localToWorld, Bounds bounds, Vector2 size, Color color, float offset, float jitter)
+        Matrix4x4 localToWorld, Bounds bounds, Vector2 size, Color color, float offset, float jitter,
+        bool sizeByTriangleArea, Vector2 triangleSizeRange,
+        bool alignBillboardToSurface, SurfaceNoiseParticleEffect.SurfaceDirection surfaceDirection)
     {
         if (batch.count == 0) return;
         batch.vertices.SetData(vertices);
@@ -150,8 +172,14 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         compute.SetMatrix("_NormalToWorld", localToWorld.inverse.transpose);
         compute.SetVector("_SizeOffset", new Vector4(Mathf.Min(size.x, size.y), Mathf.Max(size.x, size.y), offset, jitter));
         compute.SetVector("_ParticleColor", (Vector4)color);
+        compute.SetVector("_TriangleSizeSettings", new Vector4(sizeByTriangleArea ? 1f : 0f,
+            triangleSizeRange.x, triangleSizeRange.y, 0f));
+        batch.properties.SetFloat("_SurfaceSizeByTriangleArea", sizeByTriangleArea ? 1f : 0f);
         compute.SetBuffer(kernel, "_Vertices", batch.vertices);
         compute.SetBuffer(kernel, "_Normals", batch.normals);
+        compute.SetBuffer(kernel, "_SurfaceUVs", batch.uvs);
+        compute.SetBuffer(kernel, "_SurfaceDirections", batch.pool.directions);
+        compute.SetVector("_DirectionSettings", new Vector4(alignBillboardToSurface ? 1f : 0f, (float)surfaceDirection, 0, 0));
         compute.SetBuffer(kernel, "_Anchors", batch.anchors);
         compute.SetBuffer(kernel, "_SurfaceParticles", batch.particles);
         compute.Dispatch(kernel, (batch.anchorCount + 63) / 64, 1, 1);
@@ -174,10 +202,10 @@ internal sealed class SurfaceNoiseGpu : IDisposable
             GraphicsBuffer cdf = pool.a;
             if (redistribute)
             {
-                // Distribution uses the actual render camera, not the stepped line-art camera.
-                Vector3 position = camera.transform.position, forward = camera.transform.forward;
+                // Share line art's held camera sample with particle facing and size effects.
+                Vector3 position = cameraSample.position, forward = cameraSample.forward;
                 commandBuffer.SetComputeVectorParam(compute, "_DistributionCameraPosition", new Vector4(position.x,position.y,position.z,1));
-                commandBuffer.SetComputeVectorParam(compute, "_DistributionCameraForward", new Vector4(forward.x,forward.y,forward.z,camera.orthographic?1:0));
+                commandBuffer.SetComputeVectorParam(compute, "_DistributionCameraForward", new Vector4(forward.x,forward.y,forward.z,cameraSample.orthographic?1:0));
                 commandBuffer.SetComputeIntParam(compute, "_DistributionSampleCount", pool.sampleCount);
                 commandBuffer.SetComputeBufferParam(compute, weightsKernel, "_SurfaceParticles", pool.particles);
                 commandBuffer.SetComputeBufferParam(compute, weightsKernel, "_DistributionWrite", pool.a);
@@ -206,6 +234,7 @@ internal sealed class SurfaceNoiseGpu : IDisposable
             foreach (var batch in pool.batches)
             {
                 batch.properties.SetBuffer("_SurfaceDistributionCdf", cdf);
+                batch.distributionCdf = cdf;
                 batch.properties.SetVector("_SurfaceDistributionRange",new Vector4(
                     batch.anchorOffset,pool.sampleCount,instanceOffset,totalCount));
                 if (CanDraw(batch)) instanceOffset+=batch.count;
@@ -239,9 +268,63 @@ internal sealed class SurfaceNoiseGpu : IDisposable
                 settings != null ? Mathf.Clamp01(settings.cameraFacingStrength) : 0f,
                 settings != null ? Mathf.Max(0.01f, settings.cameraFacingSoftness) : 0.15f,
                 settings != null ? Mathf.Clamp01(settings.cameraSilhouetteSizeBoost) : 0f));
+            UpdateBillboardRotation(commandBuffer, batch, camera, settings);
             commandBuffer.DrawProcedural(Matrix4x4.identity, batch.material, 0,
                 MeshTopology.Triangles, 6, batch.count, batch.properties);
         }
+    }
+
+    private void UpdateBillboardRotation(CommandBuffer cmd, Batch batch, Camera camera,
+        SurfaceNoiseParticleEffect.LayerSettings settings)
+    {
+        retiredCameras.Clear();
+        foreach (var pair in batch.rotations)
+            if (!pair.Key) { pair.Value.axes.Dispose(); retiredCameras.Add(pair.Key); }
+        foreach (var retired in retiredCameras) batch.rotations.Remove(retired);
+        bool enabled = settings != null && settings.alignBillboardToSurface;
+        batch.properties.SetVector("_SurfaceBillboardRotation", new Vector4(enabled ? 1f : 0f,
+            settings != null ? settings.billboardRotationOffset * Mathf.Deg2Rad : 0f, 0, 0));
+        if (!enabled)
+        {
+            foreach (var rotation in batch.rotations.Values) rotation.initialized = false;
+            return;
+        }
+        if (rotationCompute == null)
+        {
+            rotationCompute = UnityEngine.Object.Instantiate(Resources.Load<ComputeShader>("SurfaceNoiseBillboardRotation"));
+            rotationCompute.hideFlags = HideFlags.HideAndDontSave;
+            rotationKernel = rotationCompute.FindKernel("UpdateRotation");
+        }
+        if (!batch.rotations.TryGetValue(camera, out var state))
+        {
+            state = new RotationState { axes = new GraphicsBuffer(GraphicsBuffer.Target.Structured, batch.count, 8) };
+            var initial = new Vector2[batch.count];
+            for (int i = 0; i < initial.Length; i++) initial[i] = Vector2.up;
+            state.axes.SetData(initial);
+            batch.rotations.Add(camera, state);
+        }
+        double now = SpiderVerse.LineArt.LineArtTime.Now;
+        float delta = Mathf.Clamp((float)(now - state.lastUpdate), 0f, .1f);
+        Matrix4x4 inverseView = camera.cameraToWorldMatrix;
+        cmd.SetComputeVectorParam(rotationCompute, "_RotationCameraRight", inverseView.GetColumn(0));
+        cmd.SetComputeVectorParam(rotationCompute, "_RotationCameraUp", inverseView.GetColumn(1));
+        cmd.SetComputeVectorParam(rotationCompute, "_RotationCameraPosition", inverseView.GetColumn(3));
+        Vector4 forward = -inverseView.GetColumn(2);
+        forward.w = camera.orthographic ? 1f : 0f;
+        cmd.SetComputeVectorParam(rotationCompute, "_RotationCameraForward", forward);
+        cmd.SetComputeVectorParam(rotationCompute, "_RotationStep", new Vector4(
+            1f - Mathf.Exp(-Mathf.Max(1f, settings.billboardRotationFollowSpeed) * delta), state.initialized ? 0f : 1f, 0, 0));
+        cmd.SetComputeIntParam(rotationCompute, "_RotationCount", batch.count);
+        cmd.SetComputeVectorParam(rotationCompute, "_SurfaceSilhouetteDistribution", batch.properties.GetVector(SilhouetteDistributionId));
+        cmd.SetComputeVectorParam(rotationCompute, "_SurfaceDistributionRange", batch.properties.GetVector("_SurfaceDistributionRange"));
+        cmd.SetComputeBufferParam(rotationCompute, rotationKernel, "_SurfaceDistributionCdf", batch.distributionCdf);
+        cmd.SetComputeBufferParam(rotationCompute, rotationKernel, "_SurfaceDirections", batch.pool.directions);
+        cmd.SetComputeBufferParam(rotationCompute, rotationKernel, "_SurfaceParticles", batch.pool.particles);
+        cmd.SetComputeBufferParam(rotationCompute, rotationKernel, "_SurfaceBillboardAxes", state.axes);
+        cmd.DispatchCompute(rotationCompute, rotationKernel, (batch.count + 63) / 64, 1, 1);
+        batch.properties.SetBuffer("_SurfaceBillboardAxes", state.axes);
+        state.lastUpdate = now;
+        state.initialized = true;
     }
 
     private static bool CanDraw(Batch batch) => batch.visible && batch.count > 0 &&
@@ -253,10 +336,12 @@ internal sealed class SurfaceNoiseGpu : IDisposable
         if (Application.isPlaying)
         {
             UnityEngine.Object.Destroy(compute);
+            if (rotationCompute != null) UnityEngine.Object.Destroy(rotationCompute);
         }
         else
         {
             UnityEngine.Object.DestroyImmediate(compute);
+            if (rotationCompute != null) UnityEngine.Object.DestroyImmediate(rotationCompute);
         }
     }
 }

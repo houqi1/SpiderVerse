@@ -12,13 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26c453e5fecb4cce9fefc0e6a64a491e, type: 3}
   m_Name: OuterGlowFeature
   m_EditorClassIdentifier: 
-  m_Active: 0
+  m_Active: 1
   settings:
     layerMask:
       serializedVersion: 2
       m_Bits: 64
     bloomThreshold: 0.66
     bloomKnee: 0
+    glowEnabled: 0
     intensity: 4.1
     blurAmount: 0.005
     baseUVOffset: {x: 0, y: 0.02}
@@ -34,7 +35,41 @@ MonoBehaviour:
     useDerivativeScale: 0
     maskErode: 1
     maskSoftness: 0.35
-    downsample: 2
+    downsample: 0
+    glitchEnabled: 0
+    glitchMode: 2
+    glitchOpacity: 0.7
+    glitchDisplacement: 0.025
+    glitchRGBSplit: 0.003
+    glitchSliceHeight: 14
+    glitchSliceDensity: 0.3
+    glitchBurstProbability: 0.65
+    glitchUpdatesPerSecond: 8.9
+    glitchEchoOpacity: 0.3
+    glitchSeed: 1
+    rgbNoiseTexture: {fileID: 2800000, guid: 7121a5ba2fa608142b33eb3e29495634, type: 3}
+    rgbNoiseSpeed: {x: 0.09, y: -0.04}
+    rgbBlueTickOffset: 3
+    rgbGateTexture: {fileID: 2800000, guid: 2fd555817b1f19c4b9816050cc6a576b, type: 3}
+    rgbGateSpeed: {x: 0.2, y: 0.13}
+    rgbGateThreshold: 0.142
+    rgbRedOffset: {x: 0.024, y: 0.03}
+    rgbBlueOffset: {x: -0.01, y: -0.002}
+    rgbOutsideOnly: 1
+    rgbRedColor: {r: 0.15992057, g: 1, b: 0, a: 1}
+    rgbBlueColor: {r: 0.38030052, g: 0, b: 1, a: 1}
+    noiseTexture: {fileID: 2800000, guid: 5e0c26b73a779a84c876165972d4b455, type: 3}
+    noiseST: {x: 1, y: 1, z: 0, w: 0}
+    noiseDisplacement: 0.0287
+    noiseHueShift: 2
+    noiseScrollPerTick: {x: 0.14, y: 0.03}
+    noiseTexture2: {fileID: 2800000, guid: 0b92582fc058ef44fa6d90372c7f5a93, type: 3}
+    noiseTexture3: {fileID: 2800000, guid: 61d5d2e3042fd4848a29af1b00801dd6, type: 3}
+    noiseTiling3: 2.77
+    noiseScroll3PerTick: {x: 5.42, y: 1.21}
+    noiseST2: {x: 1, y: 1, z: 0, w: 0}
+    noiseSpeed2: {x: 0.2, y: 0.2}
+    noiseMultiplyStrength: 1
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
 --- !u!114 &-6102837461928374651
@@ -176,7 +211,8 @@ MonoBehaviour:
   - {fileID: 5303485742155498541}
   - {fileID: 759746206708023037}
   - {fileID: 4182119195389091606}
-  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eabfd3e485226298b0a
+  - {fileID: 8854350749645226314}
+  m_RendererFeatureMap: ad6b866f10d7b46c2ea87bb5d08cd890850ed09fa95d4eab2d0487f42ec49949fd3e485226298b0a165f821940df093a4a41512d18f9e07a
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -256,12 +292,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5e13eaf35b99499b86e7e4cf3a9944dc, type: 3}
   m_Name: Motion Vector Debug
   m_EditorClassIdentifier: 
-  m_Active: 1
+  m_Active: 0
   passMaterial: {fileID: 2100000, guid: d18e95e7f6c74707853f918a1ce5c402, type: 2}
   updateMode: 0
-  updateRate: 12
+  updateRate: 15.7
   holdLastDirection: 0
-  resetAfterSeconds: 0.1
+  resetAfterSeconds: 0.8
   showInSceneView: 1
   cameraCutDistance: 5
   cameraCutAngle: 45
@@ -348,3 +384,26 @@ MonoBehaviour:
     BlurQuality: 0
     Falloff: 100
     SampleCount: -1
+--- !u!114 &8854350749645226314
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 16c6e846ca3ebbe478c52413aa158fc9, type: 3}
+  m_Name: Lassyla EEVEE Transparency
+  m_EditorClassIdentifier: 
+  m_Active: 1
+  samples: 16
+  samplesPerFrame: 4
+  filterRadius: 1.5
+  blenderExposure: 0
+  matchTimelinePlayback: 1
+  compositeShader: {fileID: 4800000, guid: 80a707e0d0c9f8c489fd61ed9af6d02b, type: 3}
+  display: {fileID: 11700000, guid: da855bdc9c76c1147b49fc78733d58a7, type: 2}
+  inverseDisplay: {fileID: 11700000, guid: 2c71e039428f6cf4fa6c445b20259813, type: 2}
+  sharedMaterial: {fileID: 2100000, guid: dd8801b650753a24394d49a7b4d810a0, type: 2}
+  edgeCoordinateReference: {fileID: 2100000, guid: 0608ccfbecf78704c91ab5bd7a8da275, type: 2}

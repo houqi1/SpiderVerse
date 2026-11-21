@@ -178,6 +178,140 @@ Shader "Hidden/Custom/OuterGlow"
             float3 outer = blurred * (1.0 - mask);
             return float4(outer * _Intensity, 1.0);
         }
+        float4 _GlitchParams; // opacity, displacement, RGB split, slice UV height
+        float4 _GlitchTiming; // quantized time, density, burst probability, seed
+        float4 _GlitchStyle;  // echo opacity, anchor Y, anchored flag
+        float4 _RGBColorR;    // tint of the displaced red-channel layer
+        float4 _RGBColorB;    // tint of the displaced blue-channel layer
+
+        float GlitchHash(float2 p)
+        {
+            return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+        }
+
+        float4 GlitchSample(float2 uv)
+        {
+            // Transparent border instead of smearing a character touching the viewport edge.
+            float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+            return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv) * inside;
+        }
+
+        float4 CompositeGlitch(Varyings input) : SV_Target
+        {
+            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+            float2 uv = input.texcoord;
+            float tick = _GlitchTiming.x;
+            float seed = _GlitchTiming.w;
+            float band = floor((uv.y - _GlitchStyle.y * _GlitchStyle.z) / max(_GlitchParams.w, 1e-6));
+            float burst = 1.0 - step(_GlitchTiming.z, GlitchHash(float2(tick, seed + 17.0)));
+            float active = burst * (1.0 - step(_GlitchTiming.y, GlitchHash(float2(band + seed, tick))));
+            float shift = (GlitchHash(float2(band + seed + 31.0, tick)) * 2.0 - 1.0) * _GlitchParams.y;
+            float2 sampleUV = uv + float2(shift, 0.0);
+            float split = _GlitchParams.z;
+            float4 r = GlitchSample(sampleUV + float2(split, 0.0));
+            float4 g = GlitchSample(sampleUV);
+            float4 b = GlitchSample(sampleUV - float2(split, 0.0));
+            // Capture RGB already fades to transparent black at filtered edges.
+            // Per-channel coverage travels with the color; never clip to the original silhouette.
+            float coverage = max(r.a, max(g.a, b.a));
+            float3 color = r.r * _RGBColorR.rgb + float3(0.0, g.g, 0.0) + b.b * _RGBColorB.rgb;
+            float4 echo = GlitchSample(uv - float2(shift * 0.65, 0.0));
+            float echoAlpha = saturate(echo.a) * _GlitchStyle.x;
+            color += echo.rgb * _GlitchStyle.x * (1.0 - coverage);
+            coverage += echoAlpha * (1.0 - coverage);
+            float weight = active * _GlitchParams.x;
+            return float4(color * weight, saturate(coverage) * weight);
+        }
+        float4 _RGBOffsets; // max red XY, max blue XY (already scaled by opacity); green is the spatial reference
+        float4 _RGBNoiseParams; // noise UV per tick XY, blue tick offset
+        float4 _RGBGateParams;  // gate noise UV per second XY, continuous time, step threshold
+        float _RGBActive;
+        float _RGBOutsideOnly;
+        TEXTURE2D(_RGBNoiseTex);
+        SAMPLER(sampler_RGBNoiseTex);
+        TEXTURE2D(_RGBGateTex);
+        SAMPLER(sampler_RGBGateTex);
+
+        float4 CompositeRGBFlicker(Varyings input) : SV_Target
+        {
+            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+            // Off frames must preserve the full-resolution camera image exactly.
+            if (_RGBActive < 0.5)
+                return 0;
+            // Gate noise sampled by continuous time: flicker is on only where noise R >= threshold.
+            float gate = step(_RGBGateParams.w, SAMPLE_TEXTURE2D_LOD(_RGBGateTex, sampler_RGBGateTex,
+                _RGBGateParams.xy * _RGBGateParams.z, 0).r);
+            if (gate < 0.5)
+                return 0;
+            float2 uv = input.texcoord;
+            // Noise RG sampled per tick (same interval as noise 1; no screen UV), remapped to (-1,1)
+            // as per-axis offset strength. The blue channel samples the same noise a few ticks later.
+            float tick = _GlitchTiming.x;
+            float2 redStrength = SAMPLE_TEXTURE2D_LOD(_RGBNoiseTex, sampler_RGBNoiseTex,
+                _RGBNoiseParams.xy * tick, 0).rg * 2.0 - 1.0;
+            float2 blueStrength = SAMPLE_TEXTURE2D_LOD(_RGBNoiseTex, sampler_RGBNoiseTex,
+                _RGBNoiseParams.xy * (tick + _RGBNoiseParams.z), 0).rg * 2.0 - 1.0;
+            float2 redOffset = _RGBOffsets.xy * redStrength;
+            float2 blueOffset = _RGBOffsets.zw * blueStrength;
+            float4 r = GlitchSample(uv - redOffset);
+            float4 g = GlitchSample(uv);
+            float4 b = GlitchSample(uv - blueOffset);
+            // Green retains coverage of the original body. Replace that body's RGB entirely,
+            // including channels that have moved away, instead of adding a colored duplicate.
+            float coverage = saturate(max(g.a, max(r.a, b.a)));
+            float3 color = r.r * _RGBColorR.rgb + float3(0.0, g.g, 0.0) + b.b * _RGBColorB.rgb;
+            // Optionally keep only the spill outside the original silhouette (green = stationary reference).
+            float outside = lerp(1.0, 1.0 - saturate(g.a), _RGBOutsideOnly);
+            return float4(color * outside, coverage * outside);
+        }
+
+        float4 _NoiseParams; // displacement (UV), hue shift (turns at noise B = 1), multiply strength, continuous time
+        float2 _NoiseScroll; // noise UV scroll per tick
+        float4 _NoiseST;     // tiling XY, offset ZW (screen UV)
+        float4 _NoiseST2;    // second noise tiling XY, offset ZW
+        float2 _NoiseSpeed2; // second noise sample UV per second of time
+        TEXTURE2D(_GlitchNoiseTex);
+        SAMPLER(sampler_GlitchNoiseTex);
+        TEXTURE2D(_GlitchNoiseTex2);
+        SAMPLER(sampler_GlitchNoiseTex2);
+        float _NoiseTiling3;   // third texture tiling (screen UV)
+        float2 _NoiseScroll3;  // third texture UV scroll per tick
+        TEXTURE2D(_GlitchNoiseTex3);
+        SAMPLER(sampler_GlitchNoiseTex3);
+
+        // Rotate around the gray axis; linear, so it is safe on premultiplied color.
+        float3 HueShift(float3 c, float turns)
+        {
+            float a = turns * 6.28318530718;
+            float cs = cos(a), sn = sin(a);
+            const float3 k = 0.57735026919;
+            return c * cs + cross(k, c) * sn + k * dot(k, c) * (1.0 - cs);
+        }
+
+        float4 CompositeNoiseDisplace(Varyings input) : SV_Target
+        {
+            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+            float2 uv = input.texcoord;
+            float tick = _GlitchTiming.x;
+            // Noise scrolls in whole steps, once per tick.
+            float4 noise = SAMPLE_TEXTURE2D_LOD(_GlitchNoiseTex, sampler_GlitchNoiseTex,
+                uv * _NoiseST.xy + _NoiseST.zw + _NoiseScroll * tick, 0);
+            // Second noise is sampled by continuous time only (one value for the whole screen),
+            // remapped and multiplied onto the first remapped noise.
+            float4 noise2 = SAMPLE_TEXTURE2D_LOD(_GlitchNoiseTex2, sampler_GlitchNoiseTex2,
+                _NoiseSpeed2 * _NoiseParams.w * _NoiseST2.xy + _NoiseST2.zw, 0);
+            float2 n = (noise.rg * 2.0 - 1.0) * lerp(1.0, noise2.rg * 2.0 - 1.0, _NoiseParams.z);
+            // Displaced sampling also reveals the character outside its original silhouette.
+            float4 c = GlitchSample(uv + n * _NoiseParams.x);
+            float coverage = saturate(c.a);
+            // Third texture scrolls per tick like the first noise; max-blended into the character color
+            // (premultiplied, so limited to coverage) before the hue shift.
+            float3 layer = SAMPLE_TEXTURE2D_LOD(_GlitchNoiseTex3, sampler_GlitchNoiseTex3,
+                uv * _NoiseTiling3 + _NoiseScroll3 * tick, 0).rgb;
+            float3 color = HueShift(max(c.rgb, layer * coverage), noise.b * _NoiseParams.y);
+            float weight = _GlitchParams.x;
+            return float4(color * weight, coverage * weight);
+        }
         ENDHLSL
 
         Pass
@@ -205,6 +339,36 @@ Shader "Hidden/Custom/OuterGlow"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment CompositeOuter
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "CharacterGlitch"
+            Blend One OneMinusSrcAlpha, Zero One
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment CompositeGlitch
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "CharacterRGBFlicker"
+            Blend One OneMinusSrcAlpha, Zero One
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment CompositeRGBFlicker
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "CharacterNoiseDisplace"
+            Blend One OneMinusSrcAlpha, Zero One
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment CompositeNoiseDisplace
             ENDHLSL
         }
     }

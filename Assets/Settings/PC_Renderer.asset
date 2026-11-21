@@ -35,6 +35,22 @@ MonoBehaviour:
     maskErode: 1
     maskSoftness: 0.35
     downsample: 2
+    glitchEnabled: 1
+    glitchMode: 1
+    rgbBurstFrequency: 1.5
+    rgbBurstDuration: 0.18
+    rgbFlickerSpeed: 24
+    rgbRedOffset: {x: 0.012, y: 0.002}
+    rgbBlueOffset: {x: -0.012, y: -0.002}
+    glitchOpacity: 0.7
+    glitchDisplacement: 0.025
+    glitchRGBSplit: 0.003
+    glitchSliceHeight: 14
+    glitchSliceDensity: 0.3
+    glitchBurstProbability: 0.65
+    glitchUpdatesPerSecond: 12
+    glitchEchoOpacity: 0.3
+    glitchSeed: 1
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
 --- !u!114 &-7856576758182827068

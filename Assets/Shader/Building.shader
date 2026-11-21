@@ -21,6 +21,16 @@ Shader "Custom/Building"
         _ShadeSmooth ("Shade Smooth", Range(0, 0.5)) = 0.05
         _AmbientStrength ("Ambient Strength", Range(0, 2)) = 0.35
 
+        [Header(Brush Shadow)]
+        [Toggle(_BRUSH_SHADOW)] _BrushShadow ("Enable Brush Stroke Cast Shadow", Float) = 0
+        _BrushShadowMap ("Brush Stroke Noise (shared texture, world triplanar, sRGB off). Tiling/Offset = EDGE", 2D) = "gray" {}
+        _BrushEdgeRotation ("Edge Stroke Rotation (deg)", Range(-180, 180)) = 0
+        _BrushInnerST ("Inner Tiling (xy) / Offset (zw)", Vector) = (1.7, 1.7, 0.37, 0.61)
+        _BrushInnerRotation ("Inner Stroke Rotation (deg)", Range(-180, 180)) = 45
+        _BrushShadowDivisor ("World Meters Per Noise Tile (both)", Float) = 4
+        _BrushEdgeDistort ("Edge: Shadow Sample Offset (world m, surface plane)", Range(0, 1)) = 0.15
+        _BrushInnerStrength ("Inner: Noise x Shadow Strength (1 = multiply fully)", Range(0, 1)) = 0.6
+
         [Header(Distance Fog)]
         [Toggle(_DISTANCE_FOG)] _DistanceFog ("Enable Distance Fog", Float) = 0
         [Toggle(_DISTANCE_FOG_XZ)] _DistanceFogXZ ("Use XZ Distance Only", Float) = 0
@@ -58,6 +68,9 @@ Shader "Custom/Building"
 
         [Header(Fog Color Dissolve)]
         _DissolveProgress ("Dissolve Progress (0 = white, 1 = full)", Range(0, 1)) = 1
+        [Toggle(_DISSOLVE_MAP)] _DissolveUseMap ("Use ZY Dissolve Map (replaces height + noise)", Float) = 0
+        _DissolveMapYZ ("Dissolve Map (World Space ZY)", 2D) = "gray" {}
+        _DissolveMapDivisor ("Dissolve Map Position Divisor", Float) = 1
         _DissolveYTop ("Dissolve Y Top (World Space)", Float) = 10
         _DissolveYBottom ("Dissolve Y Bottom (World Space)", Float) = 0
         _DissolveWeightY ("Dissolve Weight Top-Down", Range(0, 1)) = 0.5
@@ -71,6 +84,7 @@ Shader "Custom/Building"
         [Toggle(_OUTPUT_FOG_DENSITY)] _OutputFogDensity ("Output Fog T", Float) = 0
         [Toggle(_OUTPUT_HUE_NOISE)] _OutputHueNoise ("Output Hue Noise", Float) = 0
         [Toggle(_OUTPUT_HUE_NOISE_UV)] _OutputHueNoiseUV ("Output Hue Noise UV (positionOS.zy)", Float) = 0
+        [Toggle(_OUTPUT_BRUSH_SHADOW)] _OutputBrushShadow ("Output Brush Shadow Amount (needs Brush Shadow on)", Float) = 0
 
         [Header(Surface)]
         [Enum(UnityEngine.Rendering.CullMode)] _Cull ("Cull", Float) = 2
@@ -106,11 +120,14 @@ Shader "Custom/Building"
             #pragma shader_feature_local _OUTPUT_OVERLAY_MAP
             #pragma shader_feature_local_fragment _HUE_NOISE
             #pragma shader_feature_local_fragment _NOISE_LAYER2
+            #pragma shader_feature_local_fragment _DISSOLVE_MAP
             #pragma shader_feature_local_fragment _OUTPUT_FOG_DENSITY
             #pragma shader_feature_local_fragment _OUTPUT_HUE_NOISE
             #pragma shader_feature_local_fragment _OUTPUT_HUE_NOISE_UV
             #pragma shader_feature_local_fragment _DISTANCE_FOG
             #pragma shader_feature_local_fragment _DISTANCE_FOG_XZ
+            #pragma shader_feature_local_fragment _BRUSH_SHADOW
+            #pragma shader_feature_local_fragment _OUTPUT_BRUSH_SHADOW
 
             #include "BuildingInput.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -265,23 +282,102 @@ Shader "Custom/Building"
                 half t;
                 DistanceFogAmount(positionWS, t);
 
+            #if defined(_DISSOLVE_MAP)
+                // Map mode: the ZY-sampled map replaces the height + noise term (low values appear first).
+                float2 mapUV = positionWS.zy / max(abs(_DissolveMapDivisor), 1e-5)
+                    * _DissolveMapYZ_ST.xy + _DissolveMapYZ_ST.zw;
+                half topDown = SAMPLE_TEXTURE2D(_DissolveMapYZ, sampler_DissolveMapYZ, mapUV).r;
+                half noiseAmount = 0.0h;
+            #else
                 half yN = saturate((positionWS.y - _DissolveYBottom) / max(_DissolveYTop - _DissolveYBottom, 1e-4));
                 // Planar sample with world-space XZ (divide position first, then Tiling / Offset).
                 float2 noiseUV = positionWS.xz / max(abs(_DissolveNoiseDivisor), 1e-5)
                     * _DissolveNoiseMap_ST.xy + _DissolveNoiseMap_ST.zw;
                 half noise = SAMPLE_TEXTURE2D(_DissolveNoiseMap, sampler_DissolveNoiseMap, noiseUV).r;
                 half topDown = (1.0h - yN) + (noise - 0.5h) * _DissolveNoiseAmount;
+                half noiseAmount = _DissolveNoiseAmount;
+            #endif
                 half farNear = 1.0h - t;
 
                 half weightSum = max(_DissolveWeightY + _DissolveWeightDist, 1e-4h);
                 half appear = (topDown * _DissolveWeightY + farNear * _DissolveWeightDist) / weightSum;
 
                 // Remap progress so 0 hides every pixel and 1 reveals every pixel (including edge softness).
-                half halfAmp = 0.5h * _DissolveNoiseAmount;
+                half halfAmp = 0.5h * noiseAmount;
                 half p = lerp(-halfAmp, 1.0h + halfAmp + _DissolveSoftness, _DissolveProgress);
                 half mask = smoothstep(appear, appear + _DissolveSoftness, p);
                 return lerp(half3(1.0h, 1.0h, 1.0h), color, mask);
             }
+
+        #if defined(_BRUSH_SHADOW)
+            // ---------------------------------------------------------------------------------------------
+            // Brush stroke cast shadow (one stroke texture, two independent lookups).
+            //  EDGE : the stroke noise (texture Tiling/Offset + _BrushEdgeRotation) is turned into a 2D offset in the
+            //         surface plane; the shadow map is sampled at the DISPLACED position, so the cast shadow border
+            //         follows the strokes (offset amplitude = _BrushEdgeDistort world meters).
+            //  INNER: a second lookup of the same texture (_BrushInnerST + _BrushInnerRotation) is multiplied
+            //         straight onto the shadow strength: shadow *= lerp(1, noise, _BrushInnerStrength).
+            // ---------------------------------------------------------------------------------------------
+            half3 BrushTriWeights(float3 normalWS)
+            {
+                half3 w = abs((half3)SafeNormalize(normalWS));
+                w = pow(w, _TriplanarSharpness);
+                return w / max(w.x + w.y + w.z, 1e-5h);
+            }
+
+            // World-space triplanar stroke noise. Order per plane: divide position -> rotate (deg) -> Tiling / Offset (st)
+            // (+ extraOffset), so the edge and the inner lookups share one texture but have independent settings.
+            half BrushNoiseTri(TEXTURE2D_PARAM(noiseMap, noiseSampler), float4 st, half rotationDeg, float2 extraOffset,
+                float3 positionWS, half3 w)
+            {
+                float3 p = positionWS / max(abs(_BrushShadowDivisor), 1e-4);
+                float rotSin, rotCos;
+                sincos(radians((float)rotationDeg), rotSin, rotCos);
+                float2 uvX = p.zy;
+                float2 uvY = p.xz;
+                float2 uvZ = p.xy;
+                uvX = float2(rotCos * uvX.x - rotSin * uvX.y, rotSin * uvX.x + rotCos * uvX.y) * st.xy + st.zw + extraOffset;
+                uvY = float2(rotCos * uvY.x - rotSin * uvY.y, rotSin * uvY.x + rotCos * uvY.y) * st.xy + st.zw + extraOffset;
+                uvZ = float2(rotCos * uvZ.x - rotSin * uvZ.y, rotSin * uvZ.x + rotCos * uvZ.y) * st.xy + st.zw + extraOffset;
+                half nX = SAMPLE_TEXTURE2D(noiseMap, noiseSampler, uvX).r;
+                half nY = SAMPLE_TEXTURE2D(noiseMap, noiseSampler, uvY).r;
+                half nZ = SAMPLE_TEXTURE2D(noiseMap, noiseSampler, uvZ).r;
+                return nX * w.x + nY * w.y + nZ * w.z;
+            }
+
+            // INNER noise in [0, 1]: multiplied onto the shadow strength.
+            half BrushInnerNoise(float3 positionWS, half3 w)
+            {
+                return BrushNoiseTri(TEXTURE2D_ARGS(_BrushShadowMap, sampler_BrushShadowMap),
+                    _BrushInnerST, _BrushInnerRotation, float2(0.0, 0.0), positionWS, w);
+            }
+
+            // EDGE: world position displaced inside the surface plane by two decorrelated edge-noise lookups
+            // (the second one is shifted half a tile). Both noises are remapped to [-1, 1].
+            float3 BrushDistortedPosition(float3 positionWS, float3 normalWS, half3 w)
+            {
+                half n1 = BrushNoiseTri(TEXTURE2D_ARGS(_BrushShadowMap, sampler_BrushShadowMap),
+                    _BrushShadowMap_ST, _BrushEdgeRotation, float2(0.0, 0.0), positionWS, w);
+                half n2 = BrushNoiseTri(TEXTURE2D_ARGS(_BrushShadowMap, sampler_BrushShadowMap),
+                    _BrushShadowMap_ST, _BrushEdgeRotation, float2(0.5, 0.5), positionWS, w);
+
+                float3 N = SafeNormalize(normalWS);
+                float3 refDir = abs(N.y) < 0.99 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+                float3 T = normalize(cross(refDir, N));
+                float3 B = cross(N, T);
+                return positionWS + (T * (n1 * 2.0 - 1.0) + B * (n2 * 2.0 - 1.0)) * _BrushEdgeDistort;
+            }
+
+            // How much cast shadow this pixel gets: 0 = lit, 1 = full shadow.
+            // shadowPosWS = BrushDistortedPosition(...); innerNoise = BrushInnerNoise(...).
+            // Both are computed by the caller outside any divergent branch (texture sampling uses screen derivatives).
+            half BrushShadowAmount(float3 shadowPosWS, half innerNoise)
+            {
+                half att = MainLightRealtimeShadow(TransformWorldToShadowCoord(shadowPosWS));
+                half shadow = 1.0h - CelStep(att, 0.5h, _ShadeSmooth);          // same toon hardness as the cel step
+                return shadow * lerp(1.0h, innerNoise, saturate(_BrushInnerStrength));
+            }
+        #endif
 
             Varyings BuildingVert(Attributes input)
             {
@@ -324,17 +420,41 @@ Shader "Custom/Building"
                 // Debug: output the object-space triplanar noise as grayscale.
                 half noiseValue = HueNoiseTriplanar(input.positionOS, input.normalOS);
                 return half4(noiseValue, noiseValue, noiseValue, 1.0h);
+            #elif defined(_OUTPUT_BRUSH_SHADOW) && defined(_BRUSH_SHADOW)
+                // Debug: brush-perturbed cast shadow amount (white = shadow, black = lit), ungated by N.L.
+                float3 dbgNormalWS = NormalizeNormalPerPixel(input.normalWS);
+                half3 dbgW = BrushTriWeights(dbgNormalWS);
+                float3 dbgPos = BrushDistortedPosition(input.positionWS, dbgNormalWS, dbgW);
+                half dbgIn = BrushInnerNoise(input.positionWS, dbgW);
+                half dbgAmount = BrushShadowAmount(dbgPos, dbgIn);
+                return half4(dbgAmount, dbgAmount, dbgAmount, 1.0h);
             #else
                 float3 normalWS = NormalizeNormalPerPixel(input.normalWS);
+            #if defined(_BRUSH_SHADOW)
+                // The brush shadow samples the shadow map itself, so skip the stock single-tap lookup.
+                Light mainLight = GetMainLight();
+            #else
                 float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
                 Light mainLight = GetMainLight(shadowCoord);
+            #endif
 
                 half3 axisColor = AxisBlendColor(normalWS);
                 half4 triplanar = TriplanarSample(input.positionWS, normalWS);
 
                 half NdotL = saturate(dot(normalWS, mainLight.direction));
+            #if defined(_BRUSH_SHADOW)
+                // Terminator (N.L) stays a clean cel step; the cast shadow is a separate, continuous brush-stroke factor.
+                half3 brushW = BrushTriWeights(normalWS);
+                float3 brushShadowPos = BrushDistortedPosition(input.positionWS, normalWS, brushW);
+                half brushInnerNoise = BrushInnerNoise(input.positionWS, brushW);
+                half litMask = CelStep(NdotL * mainLight.distanceAttenuation, _ShadeThreshold, _ShadeSmooth);
+                UNITY_BRANCH
+                if (litMask > 0.001h)   // already in shade by N.L: no need to look at the shadow map
+                    litMask *= 1.0h - BrushShadowAmount(brushShadowPos, brushInnerNoise);
+            #else
                 half attenuation = mainLight.distanceAttenuation * mainLight.shadowAttenuation;
                 half litMask = CelStep(NdotL * attenuation, _ShadeThreshold, _ShadeSmooth);
+            #endif
                 half shadeMask = 1.0h - litMask;
 
                 // Lit side: axis colors. Dark side: overlay triplanar detail on axis colors.

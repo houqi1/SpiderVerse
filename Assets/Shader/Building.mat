@@ -11,7 +11,13 @@ Material:
   m_Shader: {fileID: 4800000, guid: a8c1d2e3f40516273849a0b1c2d3e4f5, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _BRUSH_SHADOW
+  - _DISSOLVE_MAP
+  - _DISTANCE_FOG
+  - _DISTANCE_FOG_XZ
+  - _HUE_NOISE
+  - _NOISE_LAYER2
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -23,9 +29,29 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
+    - _BrushShadowMap:
+        m_Texture: {fileID: 2800000, guid: c77d13885c384a659310301073300922, type: 3}
+        m_Scale: {x: 2.23, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DissolveMapYZ:
+        m_Texture: {fileID: 2800000, guid: cd507b886de491b49bfb40727d19d666, type: 3}
+        m_Scale: {x: 0.05, y: 0.03}
+        m_Offset: {x: 0, y: 0}
+    - _DissolveNoiseMap:
+        m_Texture: {fileID: 2800000, guid: e2fc0c5e8ee52394397d8df7d78947d0, type: 3}
+        m_Scale: {x: 0.2, y: 0.2}
+        m_Offset: {x: 0, y: 0}
+    - _HueNoiseMap:
+        m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
+        m_Scale: {x: 0.00005, y: 0.00005}
+        m_Offset: {x: 0, y: 0}
+    - _Noise2Map:
+        m_Texture: {fileID: 2800000, guid: 8ce599f7813340740bd2f03da21591ba, type: 3}
+        m_Scale: {x: 0.00005, y: 0.00005}
+        m_Offset: {x: 1.4, y: -0.2}
     - _TriplanarMap:
         m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
-        m_Scale: {x: 0.25, y: 0.08}
+        m_Scale: {x: -0.05, y: 0.04}
         m_Offset: {x: 0, y: 0}
     - _UVMap:
         m_Texture: {fileID: 0}
@@ -34,15 +60,65 @@ Material:
     m_Ints: []
     m_Floats:
     - _AmbientStrength: 0.35
+    - _BrushEdgeDistort: 0.046
+    - _BrushEdgeRotation: -79
+    - _BrushInnerRotation: 45
+    - _BrushInnerStrength: 0.6
+    - _BrushShadow: 1
+    - _BrushShadowDivisor: 4
     - _Cull: 2
     - _DarkOverlayStrength: 0.75
+    - _DissolveMapDivisor: 1
+    - _DissolveNoiseAmount: 0.424
+    - _DissolveNoiseDivisor: 1
+    - _DissolveProgress: 0.972
+    - _DissolveSoftness: 0.138
+    - _DissolveUseMap: 1
+    - _DissolveWeightDist: 0.5
+    - _DissolveWeightY: 0.456
+    - _DissolveYBottom: 0
+    - _DissolveYTop: 54.97
+    - _DistanceFog: 1
+    - _DistanceFogEnd: 87.2
+    - _DistanceFogFalloff: 0.1
+    - _DistanceFogMaxDensity: 1
+    - _DistanceFogStart: 13.9
+    - _DistanceFogXZ: 1
+    - _HueNoise: 1
+    - _HueNoisePositionDivisor: 1
+    - _HueShiftFadeEnd: 1
+    - _HueShiftFadePower: 1
+    - _HueShiftFadeStart: 0
+    - _HueShiftStrength: 64.4
+    - _Noise2FadeEnd: 1
+    - _Noise2FadePower: 1
+    - _Noise2FadeStart: 0
+    - _Noise2MaskMax: 0.742
+    - _Noise2MaskMin: 0.292
+    - _Noise2PositionDivisor: 1
+    - _Noise2Strength: 1
+    - _NoiseAddStrength: 0.814
+    - _NoiseLayer2: 1
+    - _NoiseMaskMax: 0.792
+    - _NoiseMaskMin: 0.446
+    - _OutputBrushShadow: 0
+    - _OutputFogDensity: 0
+    - _OutputHueNoise: 0
+    - _OutputHueNoiseUV: 0
     - _OutputOverlayMap: 0
     - _ShadeSmooth: 0.05
     - _ShadeThreshold: 0.35
     - _TriplanarSharpness: 4
     m_Colors:
-    - _ColorX: {r: 1, g: 0.6490478, b: 0.27735847, a: 1}
+    - _BrushInnerST: {r: 1.7, g: 1.7, b: 0.37, a: 0.61}
+    - _ColorX: {r: 0.93207544, g: 0.73208284, b: 0.42031327, a: 1}
     - _ColorY: {r: 0.73333335, g: 0.7294118, b: 0.6862745, a: 1}
     - _ColorZ: {r: 1, g: 0.64716977, b: 0.7165791, a: 1}
+    - _DistanceFogColor: {r: 0.6, g: 0.65, b: 0.75, a: 1}
+    - _DistanceFogColorFar: {r: 1, g: 0.97395444, b: 0.61698115, a: 1}
+    - _DistanceFogColorMid: {r: 1, g: 0.53396225, b: 0.5801046, a: 1}
+    - _DistanceFogColorNear: {r: 0.5999999, g: 0.048679188, b: 0.46899277, a: 1}
+    - _Noise2Color: {r: 0.01960786, g: 0.035755806, b: 0.72156864, a: 1}
+    - _NoiseAddColor: {r: 1, g: 0.835075, b: 0.5058824, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

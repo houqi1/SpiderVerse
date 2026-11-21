@@ -1,0 +1,363 @@
+[Licensing::Module] Trying to connect to existing licensing client channel...
+[Licensing::IpcConnector] Successfully connected to the License Client on channel: "LicenseClient-win11" at "2026-11-16T16:57:18.0848077Z"
+[Licensing::Client] Error: Code 10 while verifying Licensing Client signature (process Id: 35728, path: "F:/Unity Hub/UnityLicensingClient_V1/Unity.Licensing.Client.exe")
+[Licensing::Module] Error: LicensingClient has failed validation; ignoring
+[Licensing::Client] Error: HandshakeResponse reported an error:
+	ResponseCode: 505
+	ResponseStatus: Unsupported protocol version '1.16.2'.
+[Licensing::Module] Error: Failed to handshake to channel: "LicenseClient-win11"
+[Licensing::IpcConnector] License Client channel disconnected successfully.
+[Licensing::IpcConnector] Successfully connected to the License Client on channel: "LicenseClient-win11-6000.0.48" at "2026-11-16T16:57:18.1631264Z"
+[Licensing::Client] Error: Code 10 while verifying Licensing Client signature (process Id: 4000, path: "F:/Unity Hub/Editor/Editor/Data/Resources/Licensing/Client/Unity.Licensing.Client.exe")
+[Licensing::Module] Error: LicensingClient has failed validation; ignoring
+[Licensing::Client] Handshaking with LicensingClient:
+  Version:                 1.16.2+bdef8f5
+  Session Id:              bff08134628c40a3a1cf56b7e8ac3965
+  Correlation Id:          1dd30763c0907f94dea6ba4ebea9ce20
+  External correlation Id: 1313892065914228551
+  Machine Id:              cSEb2VXFUzq4zfoatleXLUXpDz8=
+[Licensing::Module] Successfully connected to LicensingClient on channel: "LicenseClient-win11-6000.0.48" (connect: 0.00s, validation: 0.03s, handshake: 0.01s)
+[Licensing::IpcConnector] Successfully connected to the License Notification on channel: "LicenseClient-win11-6000.0.48-notifications" at "2026-11-16T16:57:18.205297Z"
+[Licensing::Module] Error: Access token is unavailable; failed to update
+[Licensing::Client] Successfully updated license
+Built from '6000.0/staging' branch; Version is '6000.0.48f1 (170d2541580d) revision 1510693'; Using compiler version '193933523'; Build Type 'Release'
+OS: 'Windows 11  (10.0.26100) 64bit CoreCountrySpecific' Language: 'zh' Physical Memory: 24299 MB
+[Licensing::Client] Successfully resolved entitlement details
+[Licensing::Module] Serial number assigned to: "ewogICJzdWJzR3JvdXAiIDogInVuaXR5IGVkaXRvciIsCiAgIm5hbWVzcGFjZSIgOiAidW5pdHlfZWRpdG9yIiwKICAidHlwZSIgOiAiRURJVE9SIiwKICAidGFnIiA6ICJVbml0eVBlcnNvbmFsXXXX"
+BatchMode: 1, IsHumanControllingUs: 0, StartBugReporterOnCrash: 0, Is64bit: 1, IsPro: 0
+[Licensing::Client] Successfully resolved entitlement details
+
+COMMAND LINE ARGUMENTS:
+F:\Unity Hub\Editor\Editor\Unity.exe
+-batchmode
+-quit
+-projectPath
+F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject
+-executeMethod
+ValidateToonCelPBR.Run
+-logFile
+F:\Projections\SpiderVerse\Tools\ToonCelPBRValidation\unity-model-normal.log
+Successfully changed project path to: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject
+F:/Projections/SpiderVerse/Tools/VideoNormalPreview/UnitySkinning/ValidationProject
+[UnityMemory] Configuration Parameters - Can be set up in boot.config
+    "memorysetup-bucket-allocator-granularity=16"
+    "memorysetup-bucket-allocator-bucket-count=8"
+    "memorysetup-bucket-allocator-block-size=33554432"
+    "memorysetup-bucket-allocator-block-count=8"
+    "memorysetup-main-allocator-block-size=16777216"
+    "memorysetup-thread-allocator-block-size=16777216"
+    "memorysetup-gfx-main-allocator-block-size=16777216"
+    "memorysetup-gfx-thread-allocator-block-size=16777216"
+    "memorysetup-cache-allocator-block-size=4194304"
+    "memorysetup-typetree-allocator-block-size=2097152"
+    "memorysetup-profiler-bucket-allocator-granularity=16"
+    "memorysetup-profiler-bucket-allocator-bucket-count=8"
+    "memorysetup-profiler-bucket-allocator-block-size=33554432"
+    "memorysetup-profiler-bucket-allocator-block-count=8"
+    "memorysetup-profiler-allocator-block-size=16777216"
+    "memorysetup-profiler-editor-allocator-block-size=1048576"
+    "memorysetup-temp-allocator-size-main=16777216"
+    "memorysetup-job-temp-allocator-block-size=2097152"
+    "memorysetup-job-temp-allocator-block-size-background=1048576"
+    "memorysetup-job-temp-allocator-reduction-small-platforms=262144"
+    "memorysetup-allocator-temp-initial-block-size-main=262144"
+    "memorysetup-allocator-temp-initial-block-size-worker=262144"
+    "memorysetup-temp-allocator-size-background-worker=32768"
+    "memorysetup-temp-allocator-size-job-worker=262144"
+    "memorysetup-temp-allocator-size-preload-manager=33554432"
+    "memorysetup-temp-allocator-size-nav-mesh-worker=65536"
+    "memorysetup-temp-allocator-size-audio-worker=65536"
+    "memorysetup-temp-allocator-size-cloud-worker=32768"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gi-baking-worker=262144"
+    "memorysetup-temp-allocator-size-gfx=262144"
+Player connection [46384]  Target information:
+
+Player connection [46384]  * "[IP] 192.168.28.124 [Port] 55505 [Flags] 2 [Guid] 3318123597 [EditorId] 3318123597 [Version] 1048832 [Id] WindowsEditor(7,LAPTOP-LI4UO11F) [Debug] 1 [PackageName] WindowsEditor [ProjectName] Editor" 
+
+Player connection [46384] Host joined multi-casting on [225.0.0.222:54997]...
+Player connection [46384] Host joined alternative multi-casting on [225.0.0.222:34997]...
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+[Package Manager] Connected to IPC stream "Upm-42432" after 0.3 seconds.
+Library Redirect Path: Library/
+[Package Manager] Restoring resolved packages state from cache
+[Licensing::Client] Successfully resolved entitlement details
+[Package Manager] Registered 56 packages:
+  Packages from [https://packages.unity.com]:
+    com.unity.ai.navigation@2.0.7 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.ai.navigation@39ae74efb85f)
+    com.unity.collab-proxy@2.13.6 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.collab-proxy@4628d2ba6ea4)
+    com.unity.ide.rider@3.0.36 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.ide.rider@4d374c7eb6db)
+    com.unity.ide.visualstudio@2.0.23 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.ide.visualstudio@198cdf337d13)
+    com.unity.inputsystem@1.14.0 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.inputsystem@7fe8299111a7)
+    com.unity.timeline@1.8.7 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.timeline@c58b4ee65782)
+    com.unity.visualscripting@1.9.6 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.visualscripting@7dcdc439b230)
+    com.unity.searcher@4.9.3 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.searcher@1e17ce91558d)
+    com.unity.burst@1.8.21 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.burst@59eb6f11d242)
+    com.unity.mathematics@1.3.2 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.mathematics@8017b507cc74)
+    com.unity.collections@2.5.1 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.collections@56bff8827a7e)
+    com.unity.nuget.mono-cecil@1.11.4 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.nuget.mono-cecil@d6f9955a5d5f)
+    com.unity.test-framework.performance@3.1.0 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.test-framework.performance@92d1d09a72ed)
+  Built-in packages:
+    com.unity.multiplayer.center@1.0.0 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.multiplayer.center@f3fb577b3546)
+    com.unity.render-pipelines.universal@17.0.4 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.render-pipelines.universal@87d5294b44e1)
+    com.unity.test-framework@1.5.1 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.test-framework@388540dd9ce6)
+    com.unity.ugui@2.0.0 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.ugui@4027c60e8806)
+    com.unity.modules.accessibility@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.accessibility)
+    com.unity.modules.ai@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.ai)
+    com.unity.modules.androidjni@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.androidjni)
+    com.unity.modules.animation@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.animation)
+    com.unity.modules.assetbundle@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.assetbundle)
+    com.unity.modules.audio@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.audio)
+    com.unity.modules.cloth@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.cloth)
+    com.unity.modules.director@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.director)
+    com.unity.modules.imageconversion@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.imageconversion)
+    com.unity.modules.imgui@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.imgui)
+    com.unity.modules.jsonserialize@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.jsonserialize)
+    com.unity.modules.particlesystem@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.particlesystem)
+    com.unity.modules.physics@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.physics)
+    com.unity.modules.physics2d@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.physics2d)
+    com.unity.modules.screencapture@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.screencapture)
+    com.unity.modules.terrain@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.terrain)
+    com.unity.modules.terrainphysics@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.terrainphysics)
+    com.unity.modules.tilemap@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.tilemap)
+    com.unity.modules.ui@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.ui)
+    com.unity.modules.uielements@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.uielements)
+    com.unity.modules.umbra@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.umbra)
+    com.unity.modules.unityanalytics@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unityanalytics)
+    com.unity.modules.unitywebrequest@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unitywebrequest)
+    com.unity.modules.unitywebrequestassetbundle@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unitywebrequestassetbundle)
+    com.unity.modules.unitywebrequestaudio@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unitywebrequestaudio)
+    com.unity.modules.unitywebrequesttexture@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unitywebrequesttexture)
+    com.unity.modules.unitywebrequestwww@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.unitywebrequestwww)
+    com.unity.modules.vehicles@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.vehicles)
+    com.unity.modules.video@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.video)
+    com.unity.modules.vr@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.vr)
+    com.unity.modules.wind@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.wind)
+    com.unity.modules.xr@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.xr)
+    com.unity.modules.subsystems@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.subsystems)
+    com.unity.modules.hierarchycore@1.0.0 (location: F:\Unity Hub\Editor\Editor\Data\Resources\PackageManager\BuiltInPackages\com.unity.modules.hierarchycore)
+    com.unity.ext.nunit@2.0.5 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.ext.nunit@031a54704bff)
+    com.unity.render-pipelines.core@17.0.4 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.render-pipelines.core@cc4eb362a63a)
+    com.unity.shadergraph@17.0.4 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.shadergraph@243c7b20d665)
+    com.unity.render-pipelines.universal-config@17.0.3 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.render-pipelines.universal-config@5146bcc65e41)
+    com.unity.rendering.light-transport@1.0.1 (location: F:\Projections\SpiderVerse\Tools\VideoNormalPreview\UnitySkinning\ValidationProject\Library\PackageCache\com.unity.rendering.light-transport@307bc27a498f)
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+[Subsystems] No new subsystems found in resolved package list.
+Package Manager log level set to [2]
+[Package Manager] Done registering packages in 0.59 seconds
+Artifact Garbage Collection - Removed 1 unused hashed content filesRefreshing native plugins compatible for Editor in 11.94 ms, found 4 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Initialize engine version: 6000.0.48f1 (170d2541580d)
+[Subsystems] Discovering subsystems at path F:/Unity Hub/Editor/Editor/Data/Resources/UnitySubsystems
+[Subsystems] Discovering subsystems at path F:/Projections/SpiderVerse/Tools/VideoNormalPreview/UnitySkinning/ValidationProject/Assets
+GfxDevice: creating device client; kGfxThreadingModeNonThreaded
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+    Renderer: NVIDIA GeForce RTX 4060 Laptop GPU (ID=0x28e0)
+    Vendor:   NVIDIA
+    VRAM:     7956 MB
+    Driver:   32.0.16.1742
+[Licensing::Client] Successfully resolved entitlement details
+Initialize mono
+Mono path[0] = 'F:/Unity Hub/Editor/Editor/Data/Managed'
+Mono path[1] = 'F:/Unity Hub/Editor/Editor/Data/MonoBleedingEdge/lib/mono/unityjit-win32'
+Mono config path = 'F:/Unity Hub/Editor/Editor/Data/MonoBleedingEdge/etc'
+Using monoOptions --debugger-agent=transport=dt_socket,embedding=1,server=y,suspend=n,address=127.0.0.1:56432
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+Using cacheserver namespaces - metadata:defaultmetadata, artifacts:defaultartifacts
+ImportWorker Server TCP listen port: 0
+AcceleratorClientConnectionCallback - disconnected - :0
+Begin MonoManager ReloadAssembly
+Registering precompiled unity dll's ...
+Register platform support module: F:/Unity Hub/Editor/Editor/Data/PlaybackEngines/WindowsStandaloneSupport/UnityEditor.WindowsStandalone.Extensions.dll
+Registered in 0.002996 seconds.
+- Loaded All Assemblies, in  0.387 seconds
+Native extension for WindowsStandalone target not found
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  0.351 seconds
+Domain Reload Profiling: 739ms
+	BeginReloadAssembly (166ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (0ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (1ms)
+	RebuildCommonClasses (37ms)
+	RebuildNativeTypeToScriptingClass (10ms)
+	initialDomainReloadingComplete (40ms)
+	LoadAllAssembliesAndSetupDomain (133ms)
+		LoadAssemblies (166ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (130ms)
+			TypeCache.Refresh (128ms)
+				TypeCache.ScanAssembly (115ms)
+			BuildScriptInfoCaches (0ms)
+			ResolveRequiredComponents (0ms)
+	FinalizeReload (352ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (312ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (27ms)
+			SetLoadedEditorAssemblies (6ms)
+			BeforeProcessingInitializeOnLoad (58ms)
+			ProcessInitializeOnLoadAttributes (147ms)
+			ProcessInitializeOnLoadMethodAttributes (74ms)
+			AfterProcessingInitializeOnLoad (0ms)
+			EditorAssembliesLoaded (0ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (0ms)
+[Licensing::Client] Successfully resolved entitlement details
+Application.AssetDatabase Initial Refresh Start
+[ScriptCompilation] Requested script compilation because: Assetdatabase observed changes in script compilation related files
+Starting: F:\Unity Hub\Editor\Editor\Data\bee_backend.exe --dont-print-to-structured-log --ipc --defer-dag-verification --dagfile="Library/Bee/1900b0aE.dag" --continue-on-failure --profile="Library/Bee/backend1.traceevents" ScriptAssemblies
+WorkingDir: F:/Projections/SpiderVerse/Tools/VideoNormalPreview/UnitySkinning/ValidationProject
+DisplayProgressbar: Compiling Scripts
+ExitCode: 0 Duration: 16s
+[BUSY       6s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[BUSY      16s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+[635/807   16s] ILPP-Configuration Library/ilpp-configuration.nevergeneratedoutput
+*** Tundra build success (16.52 seconds), 1 items updated, 807 evaluated
+AssetDatabase: script compilation time: 25.819925s
+Begin MonoManager ReloadAssembly
+- Loaded All Assemblies, in  0.888 seconds
+Start importing Assets/ToonCelPBRCheck using Guid(10f79fa1aa82e904db3f4a2b5ebf8c91) (DefaultImporter) -> (artifact id: 'b31c6c10639d4da6f94c87a02ff80898') in 0.027674 seconds
+Start importing Assets/ToonCelPBRCheck/Editor using Guid(8f2ebba3984b3544eb9f05388baae6a2) (DefaultImporter) -> (artifact id: 'd928e7dbbb7399102f8b1bea768c9094') in 0.0025558 seconds
+Refreshing native plugins compatible for Editor in 1.91 ms, found 4 plugins.
+Native extension for WindowsStandalone target not found
+Refreshing native plugins compatible for Editor in 2.03 ms, found 4 plugins.
+Mono: successfully reloaded assembly
+- Finished resetting the current domain, in  3.179 seconds
+Domain Reload Profiling: 4066ms
+	BeginReloadAssembly (278ms)
+		ExecutionOrderSort (0ms)
+		DisableScriptedObjects (6ms)
+		BackupInstance (0ms)
+		ReleaseScriptingObjects (0ms)
+		CreateAndSetChildDomain (127ms)
+	RebuildCommonClasses (34ms)
+	RebuildNativeTypeToScriptingClass (10ms)
+	initialDomainReloadingComplete (25ms)
+	LoadAllAssembliesAndSetupDomain (541ms)
+		LoadAssemblies (420ms)
+		RebuildTransferFunctionScriptingTraits (0ms)
+		AnalyzeDomain (237ms)
+			TypeCache.Refresh (166ms)
+				TypeCache.ScanAssembly (156ms)
+			BuildScriptInfoCaches (57ms)
+			ResolveRequiredComponents (10ms)
+	FinalizeReload (3179ms)
+		ReleaseScriptCaches (0ms)
+		RebuildScriptCaches (0ms)
+		SetupLoadedEditorAssemblies (2892ms)
+			LogAssemblyErrors (0ms)
+			InitializePlatformSupportModulesInManaged (12ms)
+			SetLoadedEditorAssemblies (3ms)
+			BeforeProcessingInitializeOnLoad (115ms)
+			ProcessInitializeOnLoadAttributes (2705ms)
+			ProcessInitializeOnLoadMethodAttributes (54ms)
+			AfterProcessingInitializeOnLoad (2ms)
+			EditorAssembliesLoaded (0ms)
+		ExecutionOrderSort2 (0ms)
+		AwakeInstancesAfterBackupRestoration (14ms)
+Start importing Assets/ToonCelPBRCheck/SkinnedNormalBasis.hlsl using Guid(3984ba8c7119cf2439e987ef8761a789) (ShaderIncludeImporter) -> (artifact id: '36e10a0906ebf92e2e43f6a27a5dba92') in 0.0231063 seconds
+Start importing Assets/ToonCelPBRCheck/ToonCelInput.hlsl using Guid(2c9524c0b6217104a9d39cb09205ad53) (ShaderIncludeImporter) -> (artifact id: 'a2818124e1726e1dbd50db1f77eefa04') in 0.0201889 seconds
+Start importing Assets/ToonCelPBRCheck/ToonCel.shader using Guid(d9975ea67c08d634b9a45e240d0096a0) (ShaderImporter)Launched and connected shader compiler UnityShaderCompiler.exe after 0.03 seconds
+ -> (artifact id: 'd2dfdf4c05f8c24ce7e79207a018d6e7') in 0.1315564 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.03 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.03 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.03 seconds
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+Refreshing native plugins compatible for Editor in 3.77 ms, found 4 plugins.
+Preloading 0 native plugins for Editor in 0.00 ms.
+Asset Pipeline Refresh (id=025b6c520aef94e4ab4492a91033d137): Total: 31.470 seconds - Initiated by InitialRefreshV2(ForceSynchronousImport)
+	Summary:
+		Imports: total=3 (actual=3, local cache=0, cache server=0)
+		Asset DB Process Time: managed=3 ms, native=4218 ms
+		Asset DB Callback time: managed=337 ms, native=157 ms
+		Scripting: domain reloads=1, domain reload time=888 ms, compile time=25821 ms, other=41 ms
+		Project Asset Count: scripts=1312, non-scripts=2428
+		Asset File Changes: new=0, changed=6, moved=0, deleted=0
+		Scan Filter Count: 0
+	InvokeCustomDependenciesCallbacks: 0.001ms
+	InvokePackagesCallback: 3.105ms
+	ApplyChangesToAssetFolders: 0.560ms
+	Scan: 450.319ms
+	OnSourceAssetsModified: 1.574ms
+	CategorizeAssetsWithTransientArtifact: 58.392ms
+	ProcessAssetsWithTransientArtifactChanges: 71.723ms
+	CategorizeAssets: 87.719ms
+	ImportOutOfDateAssets: 3404.414ms (-22632.849ms without children)
+		ImportManagerImport: 212.950ms (4.456ms without children)
+			ImportInProcess: 208.219ms
+			UpdateCategorizedAssets: 0.275ms
+		CompileScripts: 25821.490ms
+		ReloadNativeAssets: 0.067ms
+		UnloadImportedAssets: 1.105ms
+		ReloadImportedAssets: 0.001ms
+		EnsureUptoDateAssetsAreRegisteredWithGuidPM: 0.905ms
+		InitializingProgressBar: 0.016ms
+		PostProcessAllAssetNotificationsAddChangedAssets: 0.001ms
+		OnDemandSchedulerStart: 0.728ms
+	PostProcessAllAssets: 486.895ms
+	Hotreload: 6.879ms
+	GatherAllCurrentPrimaryArtifactRevisions: 0.000ms
+	UnloadStreamsBegin: 1.271ms
+	PersistCurrentRevisions: 0.258ms
+	UnloadStreamsEnd: 0.002ms
+	GenerateScriptTypeHashes: 2.822ms
+	Untracked: 26897.309ms
+
+Application.AssetDatabase Initial Refresh End
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.03 seconds
+Scanning for USB devices : 2.526ms
+Initializing Unity extensions:
+Launched and connected shader compiler UnityShaderCompiler.exe after 0.02 seconds
+[Licensing::Client] Successfully resolved entitlement details
+[MODES] ModeService[none].Initialize
+[MODES] ModeService[none].LoadModes
+[MODES] Loading mode Default (0) for mode-current-id-SpiderVerse
+Unloading 22 Unused Serialized files (Serialized files now loaded: 0)
+Unloading 6585 unused Assets / (7.7 MB). Loaded Objects now: 7329.
+Memory consumption went from 223.5 MB to 215.8 MB.
+Total: 10.578500 ms (FindLiveObjects: 0.617600 ms CreateObjectMapping: 0.557500 ms MarkObjects: 6.255900 ms  DeleteObjects: 3.146200 ms)
+
+Unity 6000.0.48f1 / Direct3D11
+Forward variants checked: 64
+Warmed variants: 64
+ShadowCaster, DepthOnly, MotionVectors: PASS
+Shader errors: 0
+UnityEngine.Debug:ExtractStackTraceNoAlloc (byte*,int,string)
+UnityEngine.StackTraceUtility:ExtractStackTrace ()
+UnityEngine.DebugLogHandler:Internal_Log (UnityEngine.LogType,UnityEngine.LogOption,string,UnityEngine.Object)
+UnityEngine.DebugLogHandler:LogFormat (UnityEngine.LogType,UnityEngine.Object,string,object[])
+UnityEngine.Logger:Log (UnityEngine.LogType,object)
+UnityEngine.Debug:Log (object)
+ValidateToonCelPBR:Run () (at Assets/ToonCelPBRCheck/Editor/ValidateToonCelPBR.cs:49)
+
+(Filename: Assets/ToonCelPBRCheck/Editor/ValidateToonCelPBR.cs Line: 49)
+
+Batchmode quit successfully invoked - shutting down!
+[Physics::Module] Cleanup current backned.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input System polling thread exited.
+Input System module state changed to: Shutdown.
+[Licensing::IpcConnector] License Notification channel disconnected successfully.
+[Licensing::IpcConnector] License Client channel disconnected successfully.
+AcceleratorClientConnectionCallback - disconnected - :0
+Cleanup mono
+Exiting batchmode successfully now!
+Exiting without the bug reporter. Application will terminate with return code 0

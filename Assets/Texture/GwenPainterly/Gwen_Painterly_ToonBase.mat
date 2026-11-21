@@ -1,0 +1,165 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Gwen_Painterly_ToonBase
+  m_Shader: {fileID: 4800000, guid: 6c2e9a7d3f4b4a18b5d0e1f8a9c37b52, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _CEL_THREE_TONE
+  - _PBR_SPECULAR
+  - _SHADE_FROM_AMBIENT
+  m_InvalidKeywords:
+  - _CELMODELNORMALENABLED_ON
+  - _CEL_WRAP_LAMBERT_ON
+  - _LAMBERTPERTURBMODE_MULTIPLY
+  - _LAMBERTPERTURBSPACE_OBJECT
+  - _LAMBERT_PERTURB_SWAP_UV
+  - _OUTPUT_CEL_DIFFUSE
+  - _OVERLAYBLENDMODE_MULTIPLY
+  - _SAMPLEMAPSPACE_WORLD
+  - _SAMPLE_MAP_ON
+  - _SAMPLE_MAP_SWAP_UV
+  - _SPMAPCHANNEL_A
+  - _UVMAPBLENDMODE_MULTIPLY
+  - _WRAPNORMALENABLED_ON
+  - _WRAPNORMALTANGENTSPACE_ON
+  - _WRAPTOONBLENDMODE_MULTIPLY
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: c6bf9f531e6f4217aaec784908c49724, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 2800000, guid: e7f483f8c6c11e9418aae73cae86907c, type: 3}
+        m_Scale: {x: 2, y: 2}
+        m_Offset: {x: 0, y: 0}
+    - _ColorMaskMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMap:
+        m_Texture: {fileID: 2800000, guid: e2fc0c5e8ee52394397d8df7d78947d0, type: 3}
+        m_Scale: {x: 0.01, y: 0.69}
+        m_Offset: {x: 0, y: 0}
+    - _ExtraMap:
+        m_Texture: {fileID: 2800000, guid: 7d76b48f71e64ff4982345a0bd9adde9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _LambertPerturbMap:
+        m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _UVMap:
+        m_Texture: {fileID: 2800000, guid: 5d177e8998e568b46a763046d7349a0b, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _WrapNormalMap:
+        m_Texture: {fileID: 2800000, guid: 87f648559add4e2780f6dee49b24e2c9, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AmbientDarkBlend: 0
+    - _AmbientStrength: 0.66
+    - _BaseMapUV: 1
+    - _BumpScale: 1
+    - _CelModelNormalEnabled: 1
+    - _CelThreeTone: 1
+    - _CelWrapLambert: 1
+    - _CelWrapLambertStrength: 1
+    - _ColorMaskMix: 0.5
+    - _ColorMaskStrength: 1
+    - _Cull: 2
+    - _DetailMapThreshold: 0
+    - _DisableCelDiffuse: 0
+    - _EdgeEnd: 0.37727284
+    - _EdgeStart: 0
+    - _ExtraDarkStrength: 0
+    - _ExtraHueShift: 0
+    - _HashOffset: 0.14285715
+    - _HashScale: 0.1
+    - _IOR: 1.45
+    - _LambertPerturbDebug: 0
+    - _LambertPerturbMode: 1
+    - _LambertPerturbOn: 0
+    - _LambertPerturbSpace: 1
+    - _LambertPerturbStrength: 0
+    - _LambertPerturbSwapUV: 1
+    - _LambertPerturbWidth: 0.01
+    - _LassylaEdgeEnabled: 1
+    - _LassylaHideGrain: 0
+    - _MidShadeThreshold: 0.444
+    - _NoiseDark: 0.003952979
+    - _NoiseDetail: 2
+    - _NoiseDistortion: 0
+    - _NoiseEnd: 0.57727337
+    - _NoiseLacunarity: 2
+    - _NoiseRoughness: 0.5
+    - _NoiseScale: 15
+    - _NoiseStart: 0.23636362
+    - _OutputCelDiffuse: 1
+    - _OutputCelWrapLambert: 0
+    - _OutputColorMask: 0
+    - _OutputDetailMap: 0
+    - _OutputExtraMap: 0
+    - _OutputNormalMap: 0
+    - _OutputOverlayMap: 0
+    - _OutputSpMap: 0
+    - _OutputVertexNormal: 0
+    - _OutputWrapLambert: 0
+    - _OutputWrapNormalMap: 0
+    - _OutputWrapToon: 0
+    - _OutputWrapToonBase: 0
+    - _OverlayBlendMode: 0
+    - _OverlayBlendStrength: 0.661
+    - _PBRSpecular: 1
+    - _ShadeFromAmbient: 1
+    - _ShadeSmooth: 0.062
+    - _ShadeThreshold: 0.658
+    - _SpMapChannel: 3
+    - _SpecularIntensity: 1.6
+    - _SpecularMetallic: 0
+    - _SpecularRoughness: 0.323
+    - _SpecularShapeAmount: 1
+    - _SpecularSmooth: 0.02
+    - _SpecularThreshold: 0.1
+    - _WrapAmount: 0.65
+    - _WrapNormalEnabled: 1
+    - _WrapNormalStrength: 1
+    - _WrapNormalTangentSpace: 1
+    - _WrapNormalUV: 1
+    - _WrapShadeSmooth: 0.5
+    - _WrapShadeThreshold: 0.25
+    - _WrapToonStrength: 0
+    m_Colors:
+    - _AmbientDarkColor: {r: 0.79622644, g: 0.040562414, b: 0.68707496, a: 1}
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _CelWrapLambertColor: {r: 1, g: 0.60188675, b: 0.7641943, a: 1}
+    - _MidShadeColor: {r: 1, g: 0.49622637, b: 0.840687, a: 1}
+    - _OverlayColorA: {r: 0.96981126, g: 0.60189295, b: 0.21774992, a: 1}
+    - _OverlayColorB: {r: 1, g: 1, b: 1, a: 1}
+    - _ShadeColor: {r: 0.5169811, g: 0.25653967, b: 0.40887335, a: 1}
+    - _SpecularF0: {r: 0.04, g: 0.04, b: 0.04, a: 0}
+    - _WrapShadeColor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

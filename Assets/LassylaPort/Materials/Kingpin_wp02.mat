@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Kingpin_wp02
+  m_Shader: {fileID: 4800000, guid: b31af41f38a8b7e41b7e8e5528562ed5, type: 3}
+  m_Parent: {fileID: 2100000, guid: dd8801b650753a24394d49a7b4d810a0, type: 2}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats: []
+    m_Colors:
+    - _BlenderLocal0: {r: -100, g: 0, b: 0, a: 0}
+    - _BlenderLocal1: {r: 0, g: 100, b: 0, a: 0}
+    - _BlenderLocal2: {r: 0, g: 0, b: 100, a: 0}
+    - _BlenderNormalToUnity0: {r: -100, g: 1.2129511e-18, b: 2.1684046e-19, a: 17.411037}
+    - _BlenderNormalToUnity1: {r: -2.7755583e-19, g: -0.000019470726, b: 100.00002, a: 0.040029977}
+    - _BlenderNormalToUnity2: {r: 5.404212e-26, g: -100.00002, b: -0.000019470725, a: 0.0000004738065}
+    - _BlenderWorld0: {r: -0.01, g: 2.1684016e-23, b: -1.2129509e-22, a: 0.17411037}
+    - _BlenderWorld1: {r: 4.814824e-37, g: -0.0000000019470716, b: -0.009999998, a: 0.0000000048160054}
+    - _BlenderWorld2: {r: -2.775558e-23, g: 0.009999998, b: -0.0000000019470716, a: -0.00040029967}
+    - _WorldToSourceMesh0: {r: -0.01, g: 0, b: 0, a: 1.1741103}
+    - _WorldToSourceMesh1: {r: 0, g: -0.0000000031391647, b: -0.01, a: 0.0000000018438306}
+    - _WorldToSourceMesh2: {r: 0, g: 0.01, b: -0.0000000031391647, a: -0.040399995}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

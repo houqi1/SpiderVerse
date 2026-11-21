@@ -15,6 +15,7 @@ Shader "Custom/UVDots"
         _DotSize ("Dot Size", Range(0, 0.5)) = 0.03
         [Toggle] _UseDotTexture ("Use Black/White Dot Texture", Float) = 0
         _DotTexture ("Dot Texture (White = Visible)", 2D) = "white" {}
+        [ToggleUI] _UseAtlas4x4 ("Use 4x4 Dot / Noise Atlas", Float) = 0
         [Toggle] _InvertDots ("Invert Dots", Float) = 0
         _NoiseMap ("Noise", 2D) = "gray" {}
         _NoiseThreshold ("Dissolve", Range(0, 1)) = 0
@@ -68,6 +69,8 @@ Shader "Custom/UVDots"
             SAMPLER(sampler_NoiseMap);
             TEXTURE2D(_DotTexture);
             SAMPLER(sampler_DotTexture);
+            float4 _DotTexture_TexelSize;
+            float4 _NoiseMap_TexelSize;
 
             CBUFFER_START(UnityPerMaterial)
                 half4 _BaseColor;
@@ -82,6 +85,7 @@ Shader "Custom/UVDots"
                 float _DotDensity;
                 float _DotSize;
                 float _UseDotTexture;
+                float _UseAtlas4x4;
                 float4 _DotTexture_ST;
                 half _InvertDots;
                 float4 _NoiseMap_ST;
@@ -115,10 +119,38 @@ Shader "Custom/UVDots"
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
+            float2 ParticleAtlasUV(float2 localUV, float particleSeed, float4 texelSize)
+            {
+                // Both textures use the same stable per-instance tile (0..15).
+                uint index = min((uint)(saturate(particleSeed) * 16.0), 15u);
+                float2 tile = float2(index % 4u, index / 4u);
+                // Apply texture ST within the tile, clamping instead of crossing tiles.
+                float2 inset = min(abs(texelSize.xy) * 0.5, float2(0.125, 0.125));
+                return clamp((tile + saturate(localUV)) * 0.25,
+                    tile * 0.25 + inset, (tile + 1.0) * 0.25 - inset);
+            }
+
+            float SampleParticleDot(float2 uv, float particleSeed)
+            {
+                float2 dotUV = TRANSFORM_TEX(uv, _DotTexture);
+                if (_UseAtlas4x4 > 0.5)
+                {
+                    dotUV = ParticleAtlasUV(dotUV, particleSeed, _DotTexture_TexelSize);
+                    // Base mip prevents neighboring tiles bleeding through atlas mipmaps.
+                    return SAMPLE_TEXTURE2D_LOD(_DotTexture, sampler_DotTexture, dotUV, 0).r;
+                }
+                return SAMPLE_TEXTURE2D(_DotTexture, sampler_DotTexture, dotUV).r;
+            }
+
             float SampleParticleNoise(float2 uv, float particleSeed)
             {
-                float2 noiseUV = uv * _NoiseMap_ST.xy + _NoiseMap_ST.zw +
-                    particleSeed * float2(19.19, 37.71);
+                float2 noiseUV = uv * _NoiseMap_ST.xy + _NoiseMap_ST.zw;
+                if (_UseAtlas4x4 > 0.5)
+                {
+                    noiseUV = ParticleAtlasUV(noiseUV, particleSeed, _NoiseMap_TexelSize);
+                    return SAMPLE_TEXTURE2D_LOD(_NoiseMap, sampler_NoiseMap, noiseUV, 0).r;
+                }
+                noiseUV += particleSeed * float2(19.19, 37.71);
                 return SAMPLE_TEXTURE2D(_NoiseMap, sampler_NoiseMap, noiseUV).r;
             }
 
@@ -131,8 +163,7 @@ Shader "Custom/UVDots"
                 float aa = max(fwidth(dist), 1e-5);
                 float radius = max(_DotSize, 0.0);
                 float proceduralMask = 1.0 - smoothstep(radius - aa, radius + aa, dist);
-                float textureMask = SAMPLE_TEXTURE2D(
-                    _DotTexture, sampler_DotTexture, TRANSFORM_TEX(uv, _DotTexture)).r;
+                float textureMask = SampleParticleDot(uv, particleSeed);
                 // White texels keep particles; black texels remove them. Grays stay antialiased.
                 float mask = lerp(proceduralMask, textureMask, step(0.5, _UseDotTexture));
                 // Procedural dots dissolve per cell; texture masks dissolve continuously.
@@ -169,6 +200,7 @@ Shader "Custom/UVDots"
             };
             StructuredBuffer<SurfaceParticle> _SurfaceParticles;
             #include "SurfaceNoiseDistribution.hlsl"
+            #include "SurfaceNoiseBillboardRotation.hlsl"
             Varyings Vert(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
             {
                 Varyings output = (Varyings)0;
@@ -195,8 +227,9 @@ Shader "Custom/UVDots"
                     influenceEnabled * saturate(_SurfaceCameraInfluence.y));
                 float silhouette = 1.0 - abs(facing);
                 float sizeMultiplier = 1.0 + silhouette * _SurfaceCameraInfluence.w * influenceEnabled;
+                float2 rotatedCorner = RotateSurfaceBillboardCorner(corner, instanceID);
                 float3 positionWS = p.positionSize.xyz +
-                    (right * corner.x + up * corner.y) * (p.positionSize.w * sizeMultiplier);
+                    (right * rotatedCorner.x + up * rotatedCorner.y) * (p.positionSize.w * sizeMultiplier);
                 output.positionCS = TransformWorldToHClip(positionWS);
                 // This offset only moves the screen-color lookup point. The billboard
                 // geometry continues to use positionWS above, so its position is unchanged.

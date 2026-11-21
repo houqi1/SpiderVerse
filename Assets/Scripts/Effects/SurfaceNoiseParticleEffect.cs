@@ -93,7 +93,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public Vector2 noiseOffset;
         [Range(0f, 1f)] public float threshold = 0.56f;
         [Range(0f, 0.5f)] public float softness = 0.16f;
-        [Tooltip("Redistribute a fixed particle count toward side-facing surfaces; does not remove particles.")]
+        [Tooltip("Redistribute a fixed particle count toward side-facing surfaces; does not remove particles. Camera data follows Line Art's Update Rate.")]
         public bool preferSilhouetteDistribution;
         [UnityEngine.Serialization.FormerlySerializedAs("frontFacingRetention")]
         [Range(0f, 1f), Tooltip("Relative sampling weight of front-facing surfaces, not a retention fraction.")]
@@ -103,11 +103,20 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public Material particleMaterial;
         public Color particleColor = new Color(0.82f, 0.93f, 1f, 1f);
         public Vector2 particleSize = new Vector2(0.012f, 0.028f);
+        [Tooltip("Map the square root of the current world-space triangle area into Particle Size instead of using random sizes. The reference range is captured per renderer when rebuilt; equal-area meshes use the midpoint.")]
+        public bool sizeByTriangleArea;
+        [Header("Surface-aligned billboard rotation")]
+        [Tooltip("Rotate the camera-facing billboard's vertical axis along the model UV direction.")]
+        public bool alignBillboardToSurface;
+        public SurfaceDirection billboardSurfaceDirection = SurfaceDirection.V;
+        [Range(-180f, 180f)] public float billboardRotationOffset;
+        [Range(1f, 60f), Tooltip("Rotation response speed. Near view-aligned directions retain the previous angle.")]
+        public float billboardRotationFollowSpeed = 20f;
         [Range(-0.1f, 0.1f)] public float surfaceOffset = 0.006f;
         [Range(-0.1f, 0.1f)] public float surfaceOffsetJitter = 0.004f;
 
         [Header("Camera view influence")]
-        [Tooltip("Let the camera view fade back-facing particles and enlarge particles near the silhouette.")]
+        [Tooltip("Let the camera view fade back-facing particles and enlarge particles near the silhouette. Camera data follows Line Art's Update Rate.")]
         public bool cameraViewEffectEnabled;
         [Range(0f, 1f), Tooltip("How strongly back-facing particles fade out.")]
         public float cameraFacingStrength = 1f;
@@ -116,6 +125,8 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         [Range(0f, 1f), Tooltip("Maximum particle size increase at grazing angles.")]
         public float cameraSilhouetteSizeBoost = 0.35f;
     }
+
+    public enum SurfaceDirection { U, V }
 
     [Serializable]
     private sealed class RendererCountSettings
@@ -261,6 +272,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
         public int[] Triangles;
         public double[] TriangleAreaCdf;
         public double TotalArea;
+        public Vector2 TriangleSizeRange;
         public int CandidateCount;
         public readonly List<Vector3> CurrentVertices = new List<Vector3>();
         public readonly List<Vector3> CurrentNormals = new List<Vector3>();
@@ -544,6 +556,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
 
             Matrix4x4 matrix = target.transform.localToWorldMatrix;
             double accumulatedArea = 0.0;
+            float minTriangleSize = float.PositiveInfinity, maxTriangleSize = 0f;
             for (int t = 0; t < triangles.Length; t += 3)
             {
                 // Measure the initial posed surface: raw bind vertices transformed by
@@ -551,11 +564,20 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
                 Vector3 a = matrix.MultiplyPoint3x4(source.CurrentVertices[triangles[t]]);
                 Vector3 b = matrix.MultiplyPoint3x4(source.CurrentVertices[triangles[t + 1]]);
                 Vector3 c = matrix.MultiplyPoint3x4(source.CurrentVertices[triangles[t + 2]]);
-                accumulatedArea += Vector3.Cross(b - a, c - a).magnitude * 0.5;
+                float area = Vector3.Cross(b - a, c - a).magnitude * 0.5f;
+                accumulatedArea += area;
+                if (area > 0f)
+                {
+                    float triangleSize = Mathf.Sqrt(area);
+                    minTriangleSize = Mathf.Min(minTriangleSize, triangleSize);
+                    maxTriangleSize = Mathf.Max(maxTriangleSize, triangleSize);
+                }
                 source.TriangleAreaCdf[t / 3] = accumulatedArea;
             }
 
             source.TotalArea = accumulatedArea;
+            source.TriangleSizeRange = new Vector2(
+                float.IsPositiveInfinity(minTriangleSize) ? 0f : minTriangleSize, maxTriangleSize);
             if (source.TotalArea <= 1e-10)
             {
                 if (source.BakedMesh != null)
@@ -804,7 +826,7 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
                     source.Batches = new SurfaceNoiseGpu.Batch[layers.Length];
                 Material material = layer != null ? layer.particleMaterial : null;
                 source.Batches[layerIndex] = gpu.AddBatch(material, anchors[sourceIndex], source.CurrentVertices.Count, layerIndex,
-                    layer != null && layer.preferSilhouetteDistribution ? SurfaceNoiseGpu.DistributionChoices : 1);
+                    layer != null && layer.preferSilhouetteDistribution ? SurfaceNoiseGpu.DistributionChoices : 1, source.UVs);
             }
         }
         // Once independent budgets are used, anchors must not migrate to another
@@ -903,7 +925,9 @@ public sealed class SurfaceNoiseParticleEffect : MonoBehaviour
                 if (!batch.visible || batch.count == 0) continue;
                 gpu.Update(batch, source.CurrentVertices, source.CurrentNormals,
                     source.Renderer.transform.localToWorldMatrix, source.Renderer.bounds,
-                    layer.particleSize, layer.particleColor, layer.surfaceOffset, layer.surfaceOffsetJitter);
+                    layer.particleSize, layer.particleColor, layer.surfaceOffset, layer.surfaceOffsetJitter,
+                    layer.sizeByTriangleArea, source.TriangleSizeRange,
+                    layer.alignBillboardToSurface, layer.billboardSurfaceDirection);
                 SubmittedParticleCount += batch.count;
             }
         }

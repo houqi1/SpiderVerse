@@ -1,0 +1,65 @@
+{
+  "size": 4096,
+  "brush_scale": 1.8,
+  "space": "Unity object space, RGB=normal*0.5+0.5",
+  "uv": "UV1 / Mesh.uv2 / TEXCOORD1",
+  "surfaces": [
+    {
+      "name": "hero_spidergwen01_s03_body_black",
+      "coverage_pixels": 1009156,
+      "conflicting_pixels": 0,
+      "strokes": 2976,
+      "mean_angle": 5.54453706741333,
+      "p95_angle": 15.526322364807129,
+      "max_angle": 28.3571834564209
+    },
+    {
+      "name": "hero_spidergwen01_S03_body_pink",
+      "coverage_pixels": 324540,
+      "conflicting_pixels": 0,
+      "strokes": 957,
+      "mean_angle": 8.089266777038574,
+      "p95_angle": 21.568960189819336,
+      "max_angle": 28.357275009155273
+    },
+    {
+      "name": "hero_spidergwen01_S03_body_white",
+      "coverage_pixels": 843782,
+      "conflicting_pixels": 0,
+      "strokes": 2488,
+      "mean_angle": 6.67821741104126,
+      "p95_angle": 21.398357391357422,
+      "max_angle": 28.35675811767578
+    },
+    {
+      "name": "hero_spidergwen01_S03_body_wristband",
+      "coverage_pixels": 397918,
+      "conflicting_pixels": 0,
+      "strokes": 1173,
+      "mean_angle": 3.6593048572540283,
+      "p95_angle": 13.114191055297852,
+      "max_angle": 28.356794357299805
+    },
+    {
+      "name": "idle head",
+      "coverage_pixels": 897300,
+      "conflicting_pixels": 3,
+      "strokes": 2646,
+      "mean_angle": 4.831939697265625,
+      "p95_angle": 17.768278121948242,
+      "max_angle": 28.357606887817383
+    },
+    {
+      "name": "wait head",
+      "coverage_pixels": 418320,
+      "conflicting_pixels": 0,
+      "strokes": 1233,
+      "mean_angle": 6.674550533294678,
+      "p95_angle": 18.707218170166016,
+      "max_angle": 28.35694694519043
+    }
+  ],
+  "sampled_normal_length_max_error": 2.491474151611328e-05,
+  "png_format": "4096 x 4096 RGB uint16",
+  "current_revision_details": "color_validation.json"
+}

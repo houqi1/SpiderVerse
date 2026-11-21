@@ -24,20 +24,20 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _DistortionMap:
-        m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
+        m_Texture: {fileID: 2800000, guid: 48a8a1abb4a40114e9d2883564c4856c, type: 3}
         m_Scale: {x: 3, y: 3}
         m_Offset: {x: 0, y: 0}
     - _NoiseMap:
-        m_Texture: {fileID: 2800000, guid: a39f3accaf205044bacf0e9915cd6467, type: 3}
-        m_Scale: {x: 4, y: 4}
+        m_Texture: {fileID: 2800000, guid: f335a78df1a73ac45b183df7ab94b6b4, type: 3}
+        m_Scale: {x: 6, y: 6}
         m_Offset: {x: 0, y: 0}
     - _OffsetSmearMap:
-        m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
+        m_Texture: {fileID: 2800000, guid: 48a8a1abb4a40114e9d2883564c4856c, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _UnscaledSceneDistortionMap:
-        m_Texture: {fileID: 2800000, guid: df6743d489a532a40bef730e3d0fb4ba, type: 3}
-        m_Scale: {x: 3, y: 3}
+        m_Texture: {fileID: 2800000, guid: 48a8a1abb4a40114e9d2883564c4856c, type: 3}
+        m_Scale: {x: 2, y: 2}
         m_Offset: {x: 0.46, y: 0.89}
     m_Ints: []
     m_Floats:
@@ -53,7 +53,7 @@ Material:
     - _MotionThreshold: 0.1
     - _NoiseAngle: 0
     - _NoiseContrast: 1.5
-    - _NoiseOpacity: 0.35
+    - _NoiseOpacity: 0.2
     - _NoiseOutputOnly: 0
     - _OffsetSmearAngle: 0
     - _OffsetSmearEnabled: 1
@@ -66,7 +66,7 @@ Material:
     - _UnscaledSceneDistortionPixels: 16.8
     - _UnscaledSceneDistortionThreshold: 0.2
     m_Colors:
-    - _NoiseTint: {r: 1.9999999, g: 0, b: 1.6450634, a: 1}
+    - _NoiseTint: {r: 3.4841554, g: 1.528623, b: 1.3607926, a: 1}
     - _OffsetSmearUVScale: {r: 0.98, g: 0.98, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

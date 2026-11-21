@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: hero_spidergwen01_S03_body_white
+  m_Shader: {fileID: 4800000, guid: b31af41f38a8b7e41b7e8e5528562ed5, type: 3}
+  m_Parent: {fileID: 2100000, guid: dd8801b650753a24394d49a7b4d810a0, type: 2}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats: []
+    m_Colors:
+    - _BlenderLocal0: {r: -100, g: 0, b: 0, a: 0}
+    - _BlenderLocal1: {r: 0, g: 100, b: 0, a: 0}
+    - _BlenderLocal2: {r: 0, g: 0, b: 100, a: 0}
+    - _BlenderNormalToUnity0: {r: -1, g: 1.2129512e-20, b: 2.1684043e-21, a: 17.411032}
+    - _BlenderNormalToUnity1: {r: -2.7755579e-21, g: -0.00000011920932, b: 1.0000001, a: 0.00000029953665}
+    - _BlenderNormalToUnity2: {r: 3.3087233e-28, g: -1.0000001, b: -0.00000011920932, a: 0.0000000047682978}
+    - _BlenderWorld0: {r: -1, g: 2.1684027e-21, b: -1.2129511e-20, a: 17.411032}
+    - _BlenderWorld1: {r: -2.4074121e-35, g: -0.00000011920929, b: -0.9999999, a: 0.000000004768333}
+    - _BlenderWorld2: {r: -2.7755575e-21, g: 0.9999999, b: -0.00000011920929, a: -0.00000029953662}
+    - _WorldToSourceMesh0: {r: -1, g: 0, b: 0, a: 17.411032}
+    - _WorldToSourceMesh1: {r: 0, g: -0.00000011920929, b: -0.9999999, a: 0.0000000017484563}
+    - _WorldToSourceMesh2: {r: 0, g: 0.9999999, b: -0.00000011920929, a: -0.03999999}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

@@ -1,0 +1,127 @@
+{
+  "sourceSHA256": "ecda84d13cf48e98e571d434cba4dc49d30f01aeaabc93e118fa7fed1ec4d2c0",
+  "renderer": "5.2.3 LTS",
+  "sourceCommit": "e13b728c6880",
+  "samples": 2048,
+  "channels": {
+    "noise": {
+      "maxAbs": 2.086162567138672e-7,
+      "meanAbs": 1.1881638783961535e-8,
+      "worstSample": 37,
+      "tolerance": 0.000001,
+      "passed": true
+    },
+    "noiseRamp": {
+      "maxAbs": 6.258487701416016e-7,
+      "meanAbs": 3.9195583667606115e-8,
+      "worstSample": 37,
+      "tolerance": 0.000002,
+      "passed": true
+    },
+    "fresnelVsEEVEE": {
+      "maxAbs": 0.00048810243606567383,
+      "meanAbs": 0.00006622958790103439,
+      "worstSample": 42,
+      "tolerance": 0.00051,
+      "passed": true
+    },
+    "maskVsEEVEE": {
+      "maxAbs": 0.0004864335060119629,
+      "meanAbs": 0.00008709713279131392,
+      "worstSample": 64,
+      "tolerance": 0.00051,
+      "passed": true
+    },
+    "backfaceFresnel": {
+      "maxAbs": 0.0004360675811767578,
+      "meanAbs": 0.00000912497125682421,
+      "tolerance": 0.00051,
+      "passed": true
+    },
+    "backfaceMask": {
+      "maxAbs": 0.0004875659942626953,
+      "meanAbs": 0.00014671533654109226,
+      "tolerance": 0.00051,
+      "passed": true
+    }
+  },
+  "geometry": {
+    "Sphere": {
+      "probes": 1397,
+      "missing": 0,
+      "maxAbs": [
+        0.0004844069480895996,
+        0.00046503543853759766,
+        0.0004963874816894531
+      ],
+      "meanAbs": [
+        0.00018974214941583196,
+        0.00003128656390827728,
+        0.000051248067311286585
+      ],
+      "tolerance": 0.00051,
+      "passed": true
+    },
+    "Cube": {
+      "probes": 838,
+      "missing": 0,
+      "maxAbs": [
+        0.00048726797103881836,
+        0.0000992119312286377,
+        0
+      ],
+      "meanAbs": [
+        0.00017978923132994294,
+        0.000016967061382489442,
+        0
+      ],
+      "tolerance": 0.00051,
+      "passed": true
+    },
+    "Suzanne": {
+      "probes": 583,
+      "missing": 0,
+      "maxAbs": [
+        0.0004832148551940918,
+        0.00044029951095581055,
+        0.00045943260192871094
+      ],
+      "meanAbs": [
+        0.00018423218056431764,
+        0.00002717005654428263,
+        0.00004693814816902269
+      ],
+      "tolerance": 0.00051,
+      "passed": true
+    }
+  },
+  "singleSampleVisibility": {
+    "Sphere": {
+      "differentPixels": 4741,
+      "totalPixels": 65536,
+      "nativeCovered": 31484,
+      "webCovered": 31505,
+      "unionPixels": 33865,
+      "agreement": 0.9276580810546875
+    },
+    "Cube": {
+      "differentPixels": 0,
+      "totalPixels": 65536,
+      "nativeCovered": 21760,
+      "webCovered": 21760,
+      "unionPixels": 21760,
+      "agreement": 1
+    },
+    "Suzanne": {
+      "differentPixels": 1249,
+      "totalPixels": 65536,
+      "nativeCovered": 13783,
+      "webCovered": 13642,
+      "unionPixels": 14337,
+      "agreement": 0.9809417724609375
+    }
+  },
+  "nodeAndGeometryPassed": true,
+  "browserPixelIdentical": false,
+  "passed": false
+}

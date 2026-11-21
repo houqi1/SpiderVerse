@@ -1,0 +1,5 @@
+Unity 6000.0.48f1 / Direct3D11
+Forward variants checked: 64
+Warmed variants: 64
+ShadowCaster, DepthOnly, MotionVectors: PASS
+Shader errors: 0

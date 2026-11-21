@@ -15,6 +15,12 @@ Shader "Custom/Toon"
         _ShadeThreshold ("Shade Threshold", Range(0, 1)) = 0.45
         _ShadeSmooth ("Shade Smooth", Range(0, 0.5)) = 0.02
         [Toggle(_SHADE_FROM_AMBIENT)] _ShadeFromAmbient ("Shade From Ambient", Float) = 0
+        [Toggle] _CelModelNormalEnabled ("Cel Diffuse Use Model Space Normal Map", Float) = 0
+        [Toggle(_CEL_THREE_TONE)] _CelThreeTone ("Cel Diffuse Three Tone", Float) = 0
+        _MidShadeColor ("Mid Shade Color (Three Tone)", Color) = (0.7, 0.7, 0.75, 1)
+        _MidShadeThreshold ("Mid/Dark Threshold (Three Tone, below Shade Threshold)", Range(0, 1)) = 0.2
+        _AmbientDarkColor ("Darkest Layer Extra Color (Three Tone + Shade From Ambient)", Color) = (1, 1, 1, 1)
+        [Enum(Multiply, 0, Add, 1)] _AmbientDarkBlend ("Darkest Layer Extra Color Blend", Float) = 0
         [Toggle(_OUTPUT_CEL_DIFFUSE)] _OutputCelDiffuse ("Output Cel Diffuse", Float) = 0
 
         [Header(Wrap Toon Layer)]
@@ -22,6 +28,7 @@ Shader "Custom/Toon"
         _WrapNormalMap ("Model Space Normal (Linear RGB)", 2D) = "gray" {}
         [Enum(UV0, 0, UV1, 1)] _WrapNormalUV ("Model Space Normal UV", Float) = 1
         _WrapNormalStrength ("Model Space Normal Strength", Range(0, 1)) = 1
+        [Toggle] _WrapNormalTangentSpace ("Model Normal Map Is Tangent Space (follows skinning)", Float) = 0
         _WrapShadeColor ("Wrap Shade Color", Color) = (0.4, 0.4, 0.5, 1)
         _WrapShadeThreshold ("Wrap Shade Threshold", Range(0, 1)) = 0.45
         _WrapShadeSmooth ("Wrap Shade Smooth", Range(0, 0.5)) = 0.02
@@ -35,6 +42,8 @@ Shader "Custom/Toon"
         [Toggle(_DISABLE_CEL_DIFFUSE)] _DisableCelDiffuse ("Disable Cel Diffuse (use flat Base Color)", Float) = 0
         [Toggle(_OUTPUT_WRAP_TOON_BASE)] _OutputWrapToonBase ("Output Wrap Toon x Base Color", Float) = 0
         [Toggle(_OUTPUT_WRAP_NORMAL_MAP)] _OutputWrapNormalMap ("Output Model Space Normal Map", Float) = 0
+        [Toggle(_OUTPUT_NORMAL_MAP)] _OutputNormalMap ("Output Normal Map (Tangent Space)", Float) = 0
+        [Toggle(_OUTPUT_VERTEX_NORMAL)] _OutputVertexNormal ("Output Vertex Normal (World Space)", Float) = 0
 
         [Header(Ambient)]
         _AmbientStrength ("Ambient Strength", Range(0, 2)) = 0.35
@@ -119,6 +128,7 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _LAMBERTPERTURBMODE_ADD _LAMBERTPERTURBMODE_MULTIPLY
             #pragma shader_feature_local _LAMBERT_PERTURB_SWAP_UV
             #pragma shader_feature_local _OUTPUT_CEL_DIFFUSE
+            #pragma shader_feature_local _CEL_THREE_TONE
             #pragma shader_feature_local _OUTPUT_OVERLAY_MAP
             #pragma shader_feature_local _OUTPUT_EXTRA_MAP
             #pragma shader_feature_local _OUTPUT_SP_MAP
@@ -129,12 +139,15 @@ Shader "Custom/Toon"
             #pragma shader_feature_local _DISABLE_CEL_DIFFUSE
             #pragma shader_feature_local _CEL_WRAP_LAMBERT_ON
             #pragma shader_feature_local _OUTPUT_WRAP_NORMAL_MAP
+            #pragma shader_feature_local _OUTPUT_NORMAL_MAP
+            #pragma shader_feature_local _OUTPUT_VERTEX_NORMAL
             #pragma shader_feature_local _OUTPUT_COLOR_MASK
             #pragma shader_feature_local _OUTPUT_DETAIL_MAP
             #pragma shader_feature_local _OVERLAYBLENDMODE_MULTIPLY _OVERLAYBLENDMODE_ADD
             #pragma shader_feature_local _SHADE_FROM_AMBIENT
 
             #include "ToonInput.hlsl"
+            #include "SkinnedNormalBasis.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct Attributes
@@ -257,9 +270,12 @@ Shader "Custom/Toon"
 
             half EvaluateLitMask(Light light, half3 normalWS, half threshold, half smoothness)
             {
-                half NdotL = saturate(dot(normalWS, light.direction));
+                // Lambert normalized from [-1, 1] to [0, 1] (terminator at 0.5).
+                half NdotL = saturate(dot(normalWS, light.direction) * 0.5h + 0.5h);
                 half attenuation = light.distanceAttenuation * light.shadowAttenuation;
-                half litMask = CelStep(NdotL * attenuation, threshold, smoothness);
+                // Terminator shape comes from the normalized Lambert alone (same as Lambert + step).
+                // Attenuation / shadow only gates the result afterwards, so it never shifts the threshold.
+                half litMask = CelStep(NdotL, threshold, smoothness) * saturate(attenuation);
 
             #if defined(_LAMBERT_PERTURB_ON)
                 half perturbSample = SampleLambertPerturbMap(normalWS, light.direction).r;
@@ -360,7 +376,20 @@ Shader "Custom/Toon"
             half3 ToonLightingMain(Light light, half3 albedo, half3 normalWS, half3 shadeColor)
             {
                 half litMask = EvaluateLitMask(light, normalWS, _ShadeThreshold, _ShadeSmooth);
+            #if defined(_CEL_THREE_TONE)
+                // Three tones: dark (Shade Color) -> mid (Mid Shade Color) -> lit (albedo).
+                half midMask = EvaluateLitMask(light, normalWS, _MidShadeThreshold, _ShadeSmooth);
+                // Darkest layer. With Shade From Ambient the dark layer is the ambient (SH) color and the extra color is
+                // layered on top of it (Multiply = tint, Add = lift). Without Shade From Ambient it stays the plain Shade Color.
+                half3 darkColor = shadeColor;
+            #if defined(_SHADE_FROM_AMBIENT)
+                darkColor = lerp(shadeColor * _AmbientDarkColor.rgb, shadeColor + _AmbientDarkColor.rgb, saturate(_AmbientDarkBlend));
+            #endif
+                half3 darkToMid = lerp(darkColor * albedo, _MidShadeColor.rgb * albedo, midMask);
+                half3 diffuse = lerp(darkToMid, albedo, litMask);
+            #else
                 half3 diffuse = lerp(shadeColor * albedo, albedo, litMask);
+            #endif
                 return diffuse * light.color;
             }
 
@@ -412,6 +441,14 @@ Shader "Custom/Toon"
             #if defined(_OUTPUT_WRAP_NORMAL_MAP)
                 // Direct output: raw Model Space Normal map RGB (linear, not unpacked), sampled with its UV set.
                 return half4(SAMPLE_TEXTURE2D(_WrapNormalMap, sampler_WrapNormalMap, input.uvWrapNormal).rgb, 1.0h);
+            #elif defined(_OUTPUT_VERTEX_NORMAL)
+                // Direct output: interpolated vertex normal in world space, remapped to 0-1.
+                return half4(NormalizeNormalPerPixel(input.normalWS) * 0.5h + 0.5h, 1.0h);
+            #elif defined(_OUTPUT_NORMAL_MAP)
+                // Direct output: tangent space Normal Map (unpacked, scaled by Normal Strength) remapped to 0-1.
+                half3 debugNormalTS = UnpackNormalScale(
+                    SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, input.uv.zw), _BumpScale);
+                return half4(debugNormalTS * 0.5h + 0.5h, 1.0h);
             #elif defined(_OUTPUT_OVERLAY_MAP)
                 // Direct output: UV Map sampled with model UV.
                 return SAMPLE_TEXTURE2D(_UVMap, sampler_UVMap, input.uvMap);
@@ -441,14 +478,29 @@ Shader "Custom/Toon"
                     normalTS, half3x3(input.tangentWS.xyz, bitangentWS, input.normalWS)));
                 // Dedicated linear RGB object-space atlas. Never use UnpackNormal here.
                 // A missing/disabled map falls back to the geometric normal.
-                float3 wrapNormalWS = NormalizeNormalPerPixel(input.normalWS);
-                if (_WrapNormalEnabled > 0.5h)
+                float3 geometricNormalWS = NormalizeNormalPerPixel(input.normalWS);
+                float3 wrapNormalWS = geometricNormalWS;
+                if (_WrapNormalEnabled > 0.5h || _CelModelNormalEnabled > 0.5h)
                 {
                     float3 normalOS = SAMPLE_TEXTURE2D(_WrapNormalMap, sampler_WrapNormalMap, input.uvWrapNormal).rgb * 2.0 - 1.0;
                     if (dot(normalOS, normalOS) > 1e-4)
                     {
-                        float3 paintedNormalWS = TransformObjectToWorldNormal(normalize(normalOS));
-                        wrapNormalWS = SafeNormalize(lerp(wrapNormalWS, paintedNormalWS, saturate(_WrapNormalStrength)));
+                        // Default: the map holds mesh-space (object-space) normals -> valid for the bind pose only.
+                        // _WrapNormalTangentSpace = 1: the map holds the full normal direction expressed in the ORIGINAL vertex
+                        // TBN (n = S.T, S.B, S.N). It is rebuilt with the skinned TBN, so it follows the animation, and
+                        // strength 1 -> 0 fades from the map direction to the vertex normal.
+                        float3 mapNormalWS;
+                        if (_WrapNormalTangentSpace > 0.5h)
+                            mapNormalWS = ReviewedNormalTangentToWorld(normalize(normalOS), input.normalWS, input.tangentWS);
+                        else
+                            mapNormalWS = TransformObjectToWorldNormal(normalize(normalOS));
+                        float3 paintedNormalWS = SafeNormalize(lerp(geometricNormalWS,
+                            SafeNormalize(mapNormalWS), saturate(_WrapNormalStrength)));
+                        if (_WrapNormalEnabled > 0.5h)
+                            wrapNormalWS = paintedNormalWS;
+                        // Cel diffuse uses the model space normal map instead of the tangent space normal map.
+                        if (_CelModelNormalEnabled > 0.5h)
+                            normalWS = paintedNormalWS;
                     }
                 }
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS));

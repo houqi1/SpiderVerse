@@ -1,0 +1,12 @@
+Parent: Assets/Texture/GwenPainterly/Gwen_Painterly_ToonBase.mat
+Backup: Tools/GwenPainterly/MaterialHierarchy/Before_20261115_132503
+PASS hero_spidergwen01_S03_01_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_03_Painterly; overrides: _SpMap, _ColorMaskMap, _ColorMaskMix
+PASS hero_spidergwen01_S03_04_Painterly; overrides: _BaseColor, _SpMap
+PASS hero_spidergwen01_S03_05_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_06_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_head02_face_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_head02_hair_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_head02_Hood_1_Painterly; overrides: _SpMap
+PASS hero_spidergwen01_S03_head02_Hood_2_Painterly; overrides: _SpMap
+PASS: nine variants, original effective shader properties preserved; parent shade-threshold edit propagates to all nine and was restored.

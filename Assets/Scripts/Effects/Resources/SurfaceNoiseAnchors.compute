@@ -21,6 +21,9 @@ struct Particle
 };
 StructuredBuffer<float3> _Vertices;
 StructuredBuffer<float3> _Normals;
+StructuredBuffer<float2> _SurfaceUVs;
+RWStructuredBuffer<float4> _SurfaceDirections;
+float2 _DirectionSettings; // enabled, UV axis (0=U, 1=V)
 StructuredBuffer<Anchor> _Anchors;
 RWStructuredBuffer<Particle> _SurfaceParticles;
 uint _AnchorCount;
@@ -29,6 +32,7 @@ float4x4 _LocalToWorld;
 float4x4 _NormalToWorld;
 float4 _SizeOffset;
 float4 _ParticleColor;
+float4 _TriangleSizeSettings; // enabled, reference min/max sqrt(world area), unused
 
 [numthreads(64, 1, 1)]
 void UpdateAnchors(uint3 threadID : SV_DispatchThreadID)
@@ -56,6 +60,30 @@ void UpdateAnchors(uint3 threadID : SV_DispatchThreadID)
     float3 edge2 = mul((float3x3)_LocalToWorld, _Vertices[a.indices.z] - _Vertices[a.indices.x]);
     float3 faceNormal = cross(edge1, edge2);
     float lengthSq = dot(faceNormal, faceNormal);
+    float3 direction = 0;
+    if (_DirectionSettings.x > 0.5)
+    {
+        float2 uv1 = _SurfaceUVs[a.indices.y] - _SurfaceUVs[a.indices.x];
+        float2 uv2 = _SurfaceUVs[a.indices.z] - _SurfaceUVs[a.indices.x];
+        float determinant = uv1.x * uv2.y - uv1.y * uv2.x;
+        direction = abs(determinant) > 1e-12
+            ? (_DirectionSettings.y < 0.5 ? edge1 * uv2.y - edge2 * uv1.y
+                                         : edge2 * uv1.x - edge1 * uv2.x) / determinant
+            : (dot(edge1, edge1) >= dot(edge2, edge2) ? edge1 : edge2);
+        direction -= n * dot(n, direction);
+        float directionLengthSq = dot(direction, direction);
+        direction *= rsqrt(max(directionLengthSq, 1e-20));
+    }
+    _SurfaceDirections[_AnchorOffset + id] = float4(direction, 0);
+    if (_TriangleSizeSettings.x > 0.5)
+    {
+        // Area is half the cross-product length; convert area to a linear size.
+        float triangleSize = sqrt(0.5 * sqrt(max(0.0, lengthSq)));
+        float range = _TriangleSizeSettings.z - _TriangleSizeSettings.y;
+        float t = range > max(1e-10, _TriangleSizeSettings.z * 1e-6)
+            ? saturate((triangleSize - _TriangleSizeSettings.y) / range) : 0.5;
+        particle.positionSize.w = max(0, lerp(_SizeOffset.x, _SizeOffset.y, t));
+    }
     particle.distributionNormal = float4(faceNormal * rsqrt(max(lengthSq, 1e-20)),
         a.padding.x >= 0 && lengthSq > 1e-20 ? 1 : 0);
     _SurfaceParticles[_AnchorOffset + id] = particle;

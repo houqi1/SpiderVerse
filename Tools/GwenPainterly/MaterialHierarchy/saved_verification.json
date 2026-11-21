@@ -1,0 +1,8 @@
+{
+  "children": 9,
+  "common_parent": "Assets\\Texture\\GwenPainterly\\Gwen_Painterly_ToonBase.mat",
+  "child_guids_preserved": true,
+  "shared_parameters_inherited": true,
+  "shader_and_textures_unchanged": true,
+  "unity_effective_values_and_propagation_verified": true
+}
