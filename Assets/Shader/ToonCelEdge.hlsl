@@ -29,12 +29,15 @@ void ClipToonCelEdge(float3 generated, float3 normalWS, float3 positionWS, bool 
     if (_NormalEdgeStrength > 0.0)
     {
         // Rebuild the fresnel ramp value (signals.y is the raw fresnel term) and
-        // union it with the normal-difference ramp, then re-apply the noise mask (signals.z).
+        // intersect it with the normal-difference ramp, then re-apply the noise mask (signals.z).
         float edgeMul = 1.0 / (_EdgeEnd - _EdgeStart);
         float fresnelEdge = saturate(signals.y * edgeMul - edgeMul * _EdgeStart);
         float ndRange = max(_NormalEdgeEnd - _NormalEdgeStart, 1e-5);
-        float normalEdge = saturate((normalDiff - _NormalEdgeStart) / ndRange) * _NormalEdgeStrength;
-        transparency = saturate(max(fresnelEdge, normalEdge) * signals.z);
+        float normalEdge = saturate((normalDiff - _NormalEdgeStart) / ndRange);
+        // Intersection: fresnel selects the rim, normal difference trims it to real edges.
+        // Strength 0 = fresnel only, 1 = full intersection.
+        float combined = lerp(fresnelEdge, min(fresnelEdge, normalEdge), _NormalEdgeStrength);
+        transparency = saturate(combined * signals.z);
     }
     if (_LassylaHideGrain > 0.5)
         clip(0.5 - transparency);

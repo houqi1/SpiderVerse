@@ -54,7 +54,7 @@ Shader "Custom/ToonCel"
         _NoiseDistortion ("Edge Noise / Distortion", Float) = 0
         _EdgeStart ("Fresnel Ramp / Black Position", Range(0,1)) = 0
         _EdgeEnd ("Fresnel Ramp / White Position", Range(0,1)) = 0.3772728443145752
-        _NormalEdgeStrength ("Normal Difference Edge / Strength (0 = fresnel only)", Range(0,1)) = 0
+        _NormalEdgeStrength ("Normal Difference Edge / Strength (0 = fresnel only, 1 = fresnel ∩ normal difference)", Range(0,1)) = 0
         _NormalEdgeStart ("Normal Difference Edge / Black Position (screen-space normal change)", Range(0,2)) = 0.05
         _NormalEdgeEnd ("Normal Difference Edge / White Position", Range(0,2)) = 0.3
         [ToggleUI] _NormalEdgeDebug ("Debug: Show Normal Difference Range Only", Float) = 0
