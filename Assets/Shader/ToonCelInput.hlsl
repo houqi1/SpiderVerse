@@ -45,6 +45,7 @@ CBUFFER_START(UnityPerMaterial)
     float _IOR, _NoiseScale, _NoiseDetail, _NoiseRoughness, _NoiseLacunarity, _NoiseDistortion;
     float _EdgeStart, _EdgeEnd, _NoiseStart, _NoiseEnd, _NoiseDark, _HashScale, _HashOffset;
     float _NormalEdgeStrength, _NormalEdgeStart, _NormalEdgeEnd, _NormalEdgeDebug;
+    float _LassylaEdgeBlend, _EdgeBlendMin, _EdgeBlendStart, _EdgeBlendEnd, _EdgeBlendDepthCutoff;
 CBUFFER_END
 
 float _ToonLassylaCamera;

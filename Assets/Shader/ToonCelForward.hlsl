@@ -9,7 +9,9 @@
 #include "SkinnedNormalBasis.hlsl"
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-#if defined(TOON_LASSYLA_SAMPLE)
+// The coverage/depth passes and the unfiltered colour pass all evaluate the edge signal.
+#if defined(TOON_LASSYLA_SAMPLE) || defined(TOON_LASSYLA_COLOUR)
+#define TOON_EDGE_DATA 1
 #include "ToonCelEdge.hlsl"
 #endif
 
@@ -20,7 +22,7 @@ struct Attributes
     float4 tangentOS : TANGENT;
     float2 uv : TEXCOORD0;
     float2 uv1 : TEXCOORD1;
-#if defined(TOON_LASSYLA_SAMPLE)
+#if defined(TOON_EDGE_DATA)
     float3 sourceGenerated : TEXCOORD2;
     float4 bakedGenerated : TEXCOORD7;
     uint vertexID : SV_VertexID;
@@ -36,7 +38,7 @@ struct Varyings
     float3 normalWS : TEXCOORD2;
     float4 tangentWS : TEXCOORD3;
     float2 uvWrapNormal : TEXCOORD4;
-#if defined(TOON_LASSYLA_SAMPLE)
+#if defined(TOON_EDGE_DATA)
     float3 generated : TEXCOORD5;
     float3 edgeNormalWS : TEXCOORD6;
 #endif
@@ -71,6 +73,9 @@ Varyings ToonVert(Attributes input)
     output.edgeNormalWS = LassylaEdgeNormalWS(input.normalOS);
 #elif defined(TOON_LASSYLA_COLOUR)
     if (_LassylaEdgeEnabled < 0.5) output.positionCS = float4(2,2,2,1);
+    // Unjittered: this pass is the unfiltered colour layer; it also carries the edge opacity.
+    output.generated = ToonGenerated(input.sourceGenerated,input.bakedGenerated,input.vertexID);
+    output.edgeNormalWS = LassylaEdgeNormalWS(input.normalOS);
 #else
     if (ToonUsesLassylaCamera()) output.positionCS = float4(2,2,2,1);
 #endif
@@ -321,8 +326,22 @@ float4 ToonEdgeFrag(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) 
 float4 ToonEdgeDepth(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) : SV_Target
 {
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-    ClipToonEdge(input,IS_FRONT_VFACE(face,true,false));
+    ClipToonCelEdgeDepth(input.generated, input.edgeNormalWS, input.positionWS, IS_FRONT_VFACE(face,true,false),
+        _LassylaJitter.z > 0 ? 1.0 : _HashScale);
     return 0;
+}
+#elif defined(TOON_LASSYLA_COLOUR)
+// Unfiltered colour layer. Alpha carries the texture-blend edge opacity (1 in hash mode);
+// the composite multiplies it with the accumulated silhouette coverage.
+half4 ToonColourFrag(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) : SV_Target
+{
+    float opacity = 1.0;
+    if (_LassylaEdgeBlend > 0.5)
+        opacity = ToonCelEdgeOpacity(ToonCelEdgeTransparency(input.generated, input.edgeNormalWS,
+            input.positionWS, IS_FRONT_VFACE(face,true,false)));
+    half4 color = ShadeToonSurface(input);
+    color.a = opacity;
+    return color;
 }
 #else
 half4 ToonFrag(Varyings input) : SV_Target { return ShadeToonSurface(input); }

@@ -45,7 +45,12 @@ Shader "Custom/ToonCel"
 
         [Header(Lassyla Irregular Edge)]
         [ToggleUI] _LassylaEdgeEnabled ("Enable Lassyla Irregular Edge", Float) = 0
-        [ToggleUI] _LassylaHideGrain ("Hide Fine Edge Grain", Float) = 0
+        [ToggleUI] _LassylaHideGrain ("Hide Fine Edge Grain (hash mode only)", Float) = 0
+        [ToggleUI] _LassylaEdgeBlend ("Edge Mode: Texture Alpha Blend (off = hash dissolve)", Float) = 0
+        _EdgeBlendMin ("Blend Mode / Min Opacity (floor at the rim)", Range(0,1)) = 0
+        _EdgeBlendStart ("Blend Mode / Fade Start (edge signal below this stays solid)", Range(0,1)) = 0.3
+        _EdgeBlendEnd ("Blend Mode / Fade End (edge signal above this is fully faded)", Range(0,1)) = 0.7
+        _EdgeBlendDepthCutoff ("Blend Mode / Depth Write Cutoff (opacity below this writes no depth)", Range(0,1)) = 0.5
         _IOR ("Fresnel / IOR", Float) = 1.4500000476837158
         _NoiseScale ("Edge Noise / Scale", Float) = 15
         _NoiseDetail ("Edge Noise / Detail", Range(0,15)) = 2
@@ -114,9 +119,9 @@ Shader "Custom/ToonCel"
             ZWrite On
 
             HLSLPROGRAM
-            #pragma target 3.0
+            #pragma target 4.5
             #pragma vertex ToonVert
-            #pragma fragment ToonFrag
+            #pragma fragment ToonColourFrag
 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS

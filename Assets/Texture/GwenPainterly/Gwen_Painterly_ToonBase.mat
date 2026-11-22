@@ -92,6 +92,11 @@ Material:
     - _Cull: 2
     - _DetailMapThreshold: 0
     - _DisableCelDiffuse: 0
+    - _EdgeBlendDepthCutoff: 0.5
+    - _EdgeBlendEnd: 0.7
+    - _EdgeBlendGamma: 1
+    - _EdgeBlendMin: 0
+    - _EdgeBlendStart: 0.3
     - _EdgeEnd: 0.37727284
     - _EdgeStart: 0
     - _ExtraDarkStrength: 0
@@ -106,6 +111,7 @@ Material:
     - _LambertPerturbStrength: 0
     - _LambertPerturbSwapUV: 1
     - _LambertPerturbWidth: 0.01
+    - _LassylaEdgeBlend: 0
     - _LassylaEdgeEnabled: 1
     - _LassylaHideGrain: 0
     - _MidShadeThreshold: 0.444
@@ -117,6 +123,10 @@ Material:
     - _NoiseRoughness: 0.5
     - _NoiseScale: 15
     - _NoiseStart: 0.23636362
+    - _NormalEdgeDebug: 0
+    - _NormalEdgeEnd: 0.06
+    - _NormalEdgeStart: 0
+    - _NormalEdgeStrength: 0
     - _OutputCelDiffuse: 1
     - _OutputCelWrapLambert: 0
     - _OutputColorMask: 0

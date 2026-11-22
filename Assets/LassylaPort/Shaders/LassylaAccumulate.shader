@@ -186,16 +186,17 @@ Shader "Hidden/Lassyla/Accumulate"
                 int2 p=(int2)i.positionCS.xy;
                 float a=saturate(LOAD_TEXTURE2D_X(_ToonCoverage,p).r);
                 if(a<=0)discard;
-                if(HasSurface(p))return float4(LOAD_TEXTURE2D_X(_ToonColour,p).rgb,a);
+                // Colour alpha is the per-material texture-blend edge opacity (1 for hash-mode materials).
+                if(HasSurface(p)){float4 c=LOAD_TEXTURE2D_X(_ToonColour,p);return float4(c.rgb,a*saturate(c.a));}
                 // A jittered silhouette may reach just outside the centre raster. Extend
                 // the nearest valid surface colour only into those covered fringe pixels.
-                int best=10;float3 rgb=0;
+                int best=10;float4 rgba=0;
                 [unroll]for(int y=-2;y<=2;y++)[unroll]for(int x=-2;x<=2;x++){
                     int d=x*x+y*y;int2 q=clamp(p+int2(x,y),0,(int2)_ToonTargetSize.xy-1);
-                    if(d<best && HasSurface(q)){best=d;rgb=LOAD_TEXTURE2D_X(_ToonColour,q).rgb;}
+                    if(d<best && HasSurface(q)){best=d;rgba=LOAD_TEXTURE2D_X(_ToonColour,q);}
                 }
                 if(best==10)discard;
-                return float4(rgb,a);
+                return float4(rgba.rgb,a*saturate(rgba.a));
             }
             ENDHLSL
         }

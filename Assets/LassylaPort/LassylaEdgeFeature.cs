@@ -237,6 +237,9 @@ namespace LassylaPort
                     var colourDesc=graph.GetTextureDesc(resources.activeColorTexture);
                     colourDesc.name="ToonCel original camera colour";colourDesc.msaaSamples=MSAASamples.None;
                     colourDesc.bindTextureMS=false;colourDesc.depthBufferBits=DepthBits.None;
+                    // Alpha carries the per-material texture-blend edge opacity, so the format must have one
+                    // (URP's 32-bit HDR colour buffer, B10G11R11, does not).
+                    colourDesc.colorFormat=GraphicsFormat.R16G16B16A16_SFloat;
                     baseColour=graph.CreateTexture(colourDesc);
                     baseDepth=graph.CreateTexture(new TextureDesc(desc.width,desc.height){name="ToonCel original surface depth",depthBufferBits=DepthBits.Depth32});
                     using var layer=graph.AddRasterRenderPass<DrawData>("Shade unfiltered ToonCel surface",out var d);
