@@ -71,6 +71,21 @@ Shader "Custom/Building"
         [Toggle(_DISSOLVE_MAP)] _DissolveUseMap ("Use ZY Dissolve Map (replaces height + noise)", Float) = 0
         _DissolveMapYZ ("Dissolve Map (World Space ZY)", 2D) = "gray" {}
         _DissolveMapDivisor ("Dissolve Map Position Divisor", Float) = 1
+        [Header(Fog Color Dissolve Map 2)]
+        [Toggle(_DISSOLVE_DUAL)] _DissolveDual ("Use Both Maps (Map 1 + Map 2, union of progress)", Float) = 0
+        _DissolveMap2Lag ("Map 2 Progress Lag (starts at this progress, both finish at 1)", Range(0, 1)) = 0.3
+        [Toggle(_DISSOLVE_MAP2)] _DissolveUseMap2 ("Use Dissolve Map 2 (ZY, overrides Map 1 / height + noise)", Float) = 0
+        _DissolveMap2YZ ("Dissolve Map 2 (World Space ZY)", 2D) = "gray" {}
+        _DissolveMap2Divisor ("Map 2 Position Divisor", Float) = 1
+        [Toggle] _DissolveMap2UseLut ("Map 2 Linear Threshold (CDF LUT equalise, constant-speed reveal)", Float) = 0
+        _DissolveMap2CdfLut ("Map 2 CDF LUT (baked 512x1, indexed by sqrt(v), linear, clamp)", 2D) = "white" {}
+        _DissolveMap2Contrast ("Map 2 Contrast (ignored when Linear Threshold on)", Range(0.1, 4)) = 1
+        [Toggle] _DissolveMap2Invert ("Map 2 Invert", Float) = 0
+        _DissolveMap2WeightMap ("Map 2 Weight Map", Range(0, 1)) = 0.5
+        _DissolveMap2WeightDist ("Map 2 Weight Far-Near", Range(0, 1)) = 0.5
+        _DissolveMap2Softness ("Map 2 Edge Softness", Range(0.001, 0.5)) = 0.1
+
+        [Header(Fog Color Dissolve Height and Noise)]
         _DissolveYTop ("Dissolve Y Top (World Space)", Float) = 10
         _DissolveYBottom ("Dissolve Y Bottom (World Space)", Float) = 0
         _DissolveWeightY ("Dissolve Weight Top-Down", Range(0, 1)) = 0.5
@@ -121,6 +136,8 @@ Shader "Custom/Building"
             #pragma shader_feature_local_fragment _HUE_NOISE
             #pragma shader_feature_local_fragment _NOISE_LAYER2
             #pragma shader_feature_local_fragment _DISSOLVE_MAP
+            #pragma shader_feature_local_fragment _DISSOLVE_MAP2
+            #pragma shader_feature_local_fragment _DISSOLVE_DUAL
             #pragma shader_feature_local_fragment _OUTPUT_FOG_DENSITY
             #pragma shader_feature_local_fragment _OUTPUT_HUE_NOISE
             #pragma shader_feature_local_fragment _OUTPUT_HUE_NOISE_UV
@@ -271,9 +288,50 @@ Shader "Custom/Building"
                 return lerp(color, fogColor, fog);
             }
 
+            // Reveal mask for one dissolve layer. Each pixel has an "appear time" (topDown blended with the
+            // far-near fog t by the weights); progress remaps so 0 hides every pixel and 1 reveals every pixel.
+            half DissolveMask(half topDown, half t, half weightMain, half weightDist, half softness,
+                half noiseAmount, half progress)
+            {
+                half farNear = 1.0h - t;
+                half weightSum = max(weightMain + weightDist, 1e-4h);
+                half appear = (topDown * weightMain + farNear * weightDist) / weightSum;
+                half halfAmp = 0.5h * noiseAmount;
+                half p = lerp(-halfAmp, 1.0h + halfAmp + softness, progress);
+                return smoothstep(appear, appear + softness, p);
+            }
+
+            // Map 1: world-space ZY sample (low values appear first).
+            half DissolveMap1Value(float3 positionWS)
+            {
+                float2 mapUV = positionWS.zy / max(abs(_DissolveMapDivisor), 1e-5)
+                    * _DissolveMapYZ_ST.xy + _DissolveMapYZ_ST.zw;
+                return SAMPLE_TEXTURE2D(_DissolveMapYZ, sampler_DissolveMapYZ, mapUV).r;
+            }
+
+            // Map 2: world-space ZY sample, optional CDF-LUT linear-threshold mapping, contrast, invert.
+            half DissolveMap2Value(float3 positionWS)
+            {
+                float2 map2UV = positionWS.zy / max(abs(_DissolveMap2Divisor), 1e-5)
+                    * _DissolveMap2YZ_ST.xy + _DissolveMap2YZ_ST.zw;
+                half v = SAMPLE_TEXTURE2D(_DissolveMap2YZ, sampler_DissolveMap2YZ, map2UV).r;
+                if (_DissolveMap2UseLut > 0.5h)
+                {
+                    // u = CDF(v) is ~Uniform[0,1], so progress == fraction of revealed pixels.
+                    // LUT indexed by sqrt(v), half-texel offset so v=0/1 hit texel centres (LUT is 512 wide).
+                    float lutU = sqrt(saturate(v)) * (511.0 / 512.0) + 0.5 / 512.0;
+                    v = SAMPLE_TEXTURE2D_LOD(_DissolveMap2CdfLut, sampler_DissolveMap2CdfLut, float2(lutU, 0.5), 0).r;
+                }
+                else
+                {
+                    v = saturate((v - 0.5h) * _DissolveMap2Contrast + 0.5h);
+                }
+                return lerp(v, 1.0h - v, step(0.5h, _DissolveMap2Invert));
+            }
+
             // Color dissolve: progress 0 = unlit pure white, 1 = untouched color.
-            // Each pixel has an "appear time": the top appears first (world-space Y, perturbed by noise),
-            // the far side appears first (fog t); the two are blended by their weights.
+            // Dual mode: Map 1 runs on _DissolveProgress, Map 2 on a lagged progress (starts at _DissolveMap2Lag and
+            // still finishes at 1); the revealed regions are united (max of the two masks).
             half3 ApplyFogDissolve(half3 color, float3 positionWS)
             {
                 if (_DissolveProgress >= 1.0h)
@@ -282,12 +340,21 @@ Shader "Custom/Building"
                 half t;
                 DistanceFogAmount(positionWS, t);
 
-            #if defined(_DISSOLVE_MAP)
-                // Map mode: the ZY-sampled map replaces the height + noise term (low values appear first).
-                float2 mapUV = positionWS.zy / max(abs(_DissolveMapDivisor), 1e-5)
-                    * _DissolveMapYZ_ST.xy + _DissolveMapYZ_ST.zw;
-                half topDown = SAMPLE_TEXTURE2D(_DissolveMapYZ, sampler_DissolveMapYZ, mapUV).r;
-                half noiseAmount = 0.0h;
+                half mask;
+            #if defined(_DISSOLVE_DUAL)
+                half mask1 = DissolveMask(DissolveMap1Value(positionWS), t, _DissolveWeightY, _DissolveWeightDist,
+                    _DissolveSoftness, 0.0h, _DissolveProgress);
+                half lag = saturate(_DissolveMap2Lag);
+                half progress2 = saturate((_DissolveProgress - lag) / max(1.0h - lag, 1e-4h));
+                half mask2 = DissolveMask(DissolveMap2Value(positionWS), t, _DissolveMap2WeightMap,
+                    _DissolveMap2WeightDist, _DissolveMap2Softness, 0.0h, progress2);
+                mask = max(mask1, mask2);
+            #elif defined(_DISSOLVE_MAP2)
+                mask = DissolveMask(DissolveMap2Value(positionWS), t, _DissolveMap2WeightMap,
+                    _DissolveMap2WeightDist, _DissolveMap2Softness, 0.0h, _DissolveProgress);
+            #elif defined(_DISSOLVE_MAP)
+                mask = DissolveMask(DissolveMap1Value(positionWS), t, _DissolveWeightY, _DissolveWeightDist,
+                    _DissolveSoftness, 0.0h, _DissolveProgress);
             #else
                 half yN = saturate((positionWS.y - _DissolveYBottom) / max(_DissolveYTop - _DissolveYBottom, 1e-4));
                 // Planar sample with world-space XZ (divide position first, then Tiling / Offset).
@@ -295,17 +362,9 @@ Shader "Custom/Building"
                     * _DissolveNoiseMap_ST.xy + _DissolveNoiseMap_ST.zw;
                 half noise = SAMPLE_TEXTURE2D(_DissolveNoiseMap, sampler_DissolveNoiseMap, noiseUV).r;
                 half topDown = (1.0h - yN) + (noise - 0.5h) * _DissolveNoiseAmount;
-                half noiseAmount = _DissolveNoiseAmount;
+                mask = DissolveMask(topDown, t, _DissolveWeightY, _DissolveWeightDist, _DissolveSoftness,
+                    _DissolveNoiseAmount, _DissolveProgress);
             #endif
-                half farNear = 1.0h - t;
-
-                half weightSum = max(_DissolveWeightY + _DissolveWeightDist, 1e-4h);
-                half appear = (topDown * _DissolveWeightY + farNear * _DissolveWeightDist) / weightSum;
-
-                // Remap progress so 0 hides every pixel and 1 reveals every pixel (including edge softness).
-                half halfAmp = 0.5h * noiseAmount;
-                half p = lerp(-halfAmp, 1.0h + halfAmp + _DissolveSoftness, _DissolveProgress);
-                half mask = smoothstep(appear, appear + _DissolveSoftness, p);
                 return lerp(half3(1.0h, 1.0h, 1.0h), color, mask);
             }
 

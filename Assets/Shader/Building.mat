@@ -13,12 +13,15 @@ Material:
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
   - _BRUSH_SHADOW
+  - _DISSOLVE_DUAL
   - _DISSOLVE_MAP
+  - _DISSOLVE_MAP2
   - _DISTANCE_FOG
   - _DISTANCE_FOG_XZ
   - _HUE_NOISE
   - _NOISE_LAYER2
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _DISSOLVEMAP2USELUT_ON
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -32,6 +35,14 @@ Material:
     - _BrushShadowMap:
         m_Texture: {fileID: 2800000, guid: c77d13885c384a659310301073300922, type: 3}
         m_Scale: {x: 2.23, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DissolveMap2CdfLut:
+        m_Texture: {fileID: 2800000, guid: 1e76ac496e36487c9ba95bbcf55a2dc6, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DissolveMap2YZ:
+        m_Texture: {fileID: 2800000, guid: e1d6227a6dece8e4b8004e612614c210, type: 3}
+        m_Scale: {x: 0.05, y: 0.03}
         m_Offset: {x: 0, y: 0}
     - _DissolveMapYZ:
         m_Texture: {fileID: 2800000, guid: cd507b886de491b49bfb40727d19d666, type: 3}
@@ -68,12 +79,22 @@ Material:
     - _BrushShadowDivisor: 4
     - _Cull: 2
     - _DarkOverlayStrength: 0.75
+    - _DissolveDual: 1
+    - _DissolveMap2Contrast: 1
+    - _DissolveMap2Divisor: 1
+    - _DissolveMap2Invert: 0
+    - _DissolveMap2Lag: 0.022
+    - _DissolveMap2Softness: 0.05
+    - _DissolveMap2UseLut: 1
+    - _DissolveMap2WeightDist: 0.5
+    - _DissolveMap2WeightMap: 0.5
     - _DissolveMapDivisor: 1
     - _DissolveNoiseAmount: 0.424
     - _DissolveNoiseDivisor: 1
-    - _DissolveProgress: 0.972
-    - _DissolveSoftness: 0.138
+    - _DissolveProgress: 1
+    - _DissolveSoftness: 0.409
     - _DissolveUseMap: 1
+    - _DissolveUseMap2: 1
     - _DissolveWeightDist: 0.5
     - _DissolveWeightY: 0.456
     - _DissolveYBottom: 0

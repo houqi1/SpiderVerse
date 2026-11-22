@@ -16,6 +16,10 @@ TEXTURE2D(_DissolveNoiseMap);
 SAMPLER(sampler_DissolveNoiseMap);
 TEXTURE2D(_DissolveMapYZ);
 SAMPLER(sampler_DissolveMapYZ);
+TEXTURE2D(_DissolveMap2YZ);
+SAMPLER(sampler_DissolveMap2YZ);
+TEXTURE2D(_DissolveMap2CdfLut);
+SAMPLER(sampler_DissolveMap2CdfLut);
 TEXTURE2D(_BrushShadowMap);
 SAMPLER(sampler_BrushShadowMap);
 
@@ -52,6 +56,15 @@ CBUFFER_START(UnityPerMaterial)
     float4 _DissolveNoiseMap_ST;
     float4 _DissolveMapYZ_ST;
     float _DissolveMapDivisor;
+    float4 _DissolveMap2YZ_ST;
+    float _DissolveMap2Divisor;
+    half _DissolveMap2Contrast;
+    half _DissolveMap2Invert;
+    half _DissolveMap2UseLut;
+    half _DissolveMap2Lag;
+    half _DissolveMap2WeightMap;
+    half _DissolveMap2WeightDist;
+    half _DissolveMap2Softness;
     half _DissolveProgress;
     float _DissolveYTop;
     float _DissolveYBottom;
