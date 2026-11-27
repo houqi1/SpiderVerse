@@ -61,6 +61,14 @@ Material:
         m_Texture: {fileID: 2800000, guid: 7d76b48f71e64ff4982345a0bd9adde9, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _GwenGrunge:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GwenShadeless:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _LambertPerturbMap:
         m_Texture: {fileID: 2800000, guid: 4a32b9c93b26fa747b6dabb935eada50, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -101,6 +109,9 @@ Material:
     - _EdgeStart: 0
     - _ExtraDarkStrength: 0
     - _ExtraHueShift: 0
+    - _GwenGrungeStrength: 0.13
+    - _GwenPaint: 0
+    - _GwenScreenStrength: 1
     - _HashOffset: 0.14285715
     - _HashScale: 0.1
     - _IOR: 1.45
@@ -149,7 +160,7 @@ Material:
     - _SpMapChannel: 3
     - _SpecularIntensity: 1.6
     - _SpecularMetallic: 0
-    - _SpecularRoughness: 0.323
+    - _SpecularRoughness: 0.368
     - _SpecularShapeAmount: 1
     - _SpecularSmooth: 0.02
     - _SpecularThreshold: 0.1
@@ -165,6 +176,7 @@ Material:
     - _AmbientDarkColor: {r: 0.79622644, g: 0.040562414, b: 0.68707496, a: 1}
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _CelWrapLambertColor: {r: 1, g: 0.60188675, b: 0.7641943, a: 1}
+    - _GwenProjectionAnchor: {r: 0, g: 0, b: 0, a: 1}
     - _MidShadeColor: {r: 1, g: 0.49622637, b: 0.840687, a: 1}
     - _OverlayColorA: {r: 0.96981126, g: 0.60189295, b: 0.21774992, a: 1}
     - _OverlayColorB: {r: 1, g: 1, b: 1, a: 1}

@@ -11,7 +11,21 @@ SAMPLER(sampler_BumpMap);
 TEXTURE2D(_WrapNormalMap);
 SAMPLER(sampler_WrapNormalMap);
 
+TEXTURE2D(_EdgeTex);
+SAMPLER(sampler_EdgeTex);
+
+TEXTURE2D(_GwenShadeless);
+SAMPLER(sampler_GwenShadeless);
+TEXTURE2D(_GwenGrunge);
+SAMPLER(sampler_GwenGrunge);
+
 CBUFFER_START(UnityPerMaterial)
+    float4 _EdgeTex_ST;
+    float _EdgeTexStrength;
+    float4 _GwenGrunge_ST;
+    float4 _GwenProjectionAnchor;
+    half _GwenScreenStrength;
+    half _GwenGrungeStrength;
     float4 _BaseMap_ST;
     float4 _BumpMap_ST;
     float4 _WrapNormalMap_ST;

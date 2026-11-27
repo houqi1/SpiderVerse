@@ -41,6 +41,7 @@ struct Varyings
 #if defined(TOON_EDGE_DATA)
     float3 generated : TEXCOORD5;
     float3 edgeNormalWS : TEXCOORD6;
+    float2 edgeUV : TEXCOORD7; // raw UV0 for the rim texture
 #endif
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -87,6 +88,9 @@ Varyings ToonVert(Attributes input)
     output.uv.xy = TRANSFORM_TEX(baseUV, _BaseMap);
     output.uvWrapNormal = TRANSFORM_TEX(wrapUV, _WrapNormalMap);
     output.uv.zw = TRANSFORM_TEX(input.uv, _BumpMap);
+#if defined(TOON_EDGE_DATA)
+    output.edgeUV = input.uv;
+#endif
     return output;
 }
 
@@ -261,6 +265,12 @@ half4 ShadeToonSurface(Varyings input)
     half4 baseSample = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv.xy);
     half3 albedo = baseSample.rgb * _BaseColor.rgb;
     half alpha = baseSample.a * _BaseColor.a;
+#if defined(_GWEN_PAINT)
+    float3 offsetWS = input.positionWS - GetCameraRelativePositionWS(_GwenProjectionAnchor.xyz);
+    float2 projectionUV = mul((float3x3)UNITY_MATRIX_V, offsetWS).xy * _GwenProjectionAnchor.w;
+    half grain = SAMPLE_TEXTURE2D(_GwenGrunge, sampler_GwenGrunge, TRANSFORM_TEX(projectionUV, _GwenGrunge)).r;
+    albedo *= lerp(1.0h, grain, _GwenGrungeStrength);
+#endif
 
     half3 shadeColor = GetShadeColor(normalWS);
     float3 color = ToonLightingMain(mainLight, albedo, normalWS, shadeColor);
@@ -306,6 +316,10 @@ half4 ShadeToonSurface(Varyings input)
     LIGHT_LOOP_END
 #endif
 
+#if defined(_GWEN_PAINT)
+    half3 ink = SAMPLE_TEXTURE2D(_GwenShadeless, sampler_GwenShadeless, input.uv.xy).rgb;
+    color += (1.0 - saturate(color)) * ink * _GwenScreenStrength;
+#endif
     // Keep very sharp/HDR highlights finite on native-half backends.
     return half4(min(color, (float)HALF_MAX), alpha);
 }
@@ -313,7 +327,7 @@ half4 ShadeToonSurface(Varyings input)
 #if defined(TOON_LASSYLA_SAMPLE)
 void ClipToonEdge(Varyings input,bool frontFace)
 {
-    ClipToonCelEdge(input.generated, input.edgeNormalWS, input.positionWS, frontFace,
+    ClipToonCelEdge(input.generated, input.edgeNormalWS, input.positionWS, frontFace, input.edgeUV,
         _LassylaJitter.z > 0 ? 1.0 : _HashScale);
 }
 float4 ToonEdgeFrag(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) : SV_Target
@@ -326,7 +340,7 @@ float4 ToonEdgeFrag(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) 
 float4 ToonEdgeDepth(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC) : SV_Target
 {
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
-    ClipToonCelEdgeDepth(input.generated, input.edgeNormalWS, input.positionWS, IS_FRONT_VFACE(face,true,false),
+    ClipToonCelEdgeDepth(input.generated, input.edgeNormalWS, input.positionWS, IS_FRONT_VFACE(face,true,false), input.edgeUV,
         _LassylaJitter.z > 0 ? 1.0 : _HashScale);
     return 0;
 }
@@ -338,7 +352,7 @@ half4 ToonColourFrag(Varyings input, FRONT_FACE_TYPE face : FRONT_FACE_SEMANTIC)
     float opacity = 1.0;
     if (_LassylaEdgeBlend > 0.5)
         opacity = ToonCelEdgeOpacity(ToonCelEdgeTransparency(input.generated, input.edgeNormalWS,
-            input.positionWS, IS_FRONT_VFACE(face,true,false)));
+            input.positionWS, IS_FRONT_VFACE(face,true,false), input.edgeUV));
     half4 color = ShadeToonSurface(input);
     color.a = opacity;
     return color;

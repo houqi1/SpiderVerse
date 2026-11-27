@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: hero_spidergwen01_S03_03_PaintedSuit
+  m_Shader: {fileID: 4800000, guid: 6c2e9a7d3f4b4a18b5d0e1f8a9c37b52, type: 3}
+  m_Parent: {fileID: 2100000, guid: ceb807f67317b7c4fba26fc1c6c7db37, type: 2}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _CEL_THREE_TONE
+  - _GWEN_PAINT
+  - _PBR_SPECULAR
+  - _SHADE_FROM_AMBIENT
+  m_InvalidKeywords:
+  - _CELMODELNORMALENABLED_ON
+  - _WRAPNORMALTANGENTSPACE_ON
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 2800000, guid: c716c2039d6253941b009e6a571db162, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GwenGrunge:
+        m_Texture: {fileID: 2800000, guid: 970f28296dc911841940207d47d542d4, type: 3}
+        m_Scale: {x: 2.5, y: 2.5}
+        m_Offset: {x: 0, y: 0}
+    - _GwenShadeless:
+        m_Texture: {fileID: 2800000, guid: d2d536b905d53e64faf6746305d8f717, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _GwenGrungeStrength: 0.15
+    - _GwenPaint: 1
+    m_Colors: []
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

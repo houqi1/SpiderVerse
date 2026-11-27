@@ -16,7 +16,7 @@ float ToonNormalDifference(float3 normalWS)
 // Returns the amount of coverage REMOVED: 0 = fully kept, 1 = fully removed.
 // The normal-difference debug view returns 0 (kept) or 2 (forced removed).
 // Derivatives are taken here, so call from uniform control flow (before any clip).
-float ToonCelEdgeTransparency(float3 generated, float3 normalWS, float3 positionWS, bool frontFace)
+float ToonCelEdgeTransparency(float3 generated, float3 normalWS, float3 positionWS, bool frontFace, float2 edgeUV)
 {
     float normalDiff = ToonNormalDifference(normalWS);
     float4 signals = LassylaEdgeSignals(generated, normalWS, positionWS, frontFace);
@@ -40,7 +40,9 @@ float ToonCelEdgeTransparency(float3 generated, float3 normalWS, float3 position
         float combined = lerp(fresnelEdge, min(fresnelEdge, normalEdge), _NormalEdgeStrength);
         transparency = saturate(combined * signals.z);
     }
-    return transparency;
+    // Rim texture: multiplied onto the rim signal (white = unchanged, dark = rim removed there).
+    float rimTex = SAMPLE_TEXTURE2D(_EdgeTex, sampler_EdgeTex, edgeUV * _EdgeTex_ST.xy + _EdgeTex_ST.zw).r;
+    return transparency * lerp(1.0, rimTex, _EdgeTexStrength);
 }
 
 // Texture-blend mode: continuous opacity (1 = solid).
@@ -54,10 +56,10 @@ float ToonCelEdgeOpacity(float transparency)
     return lerp(1.0, _EdgeBlendMin, t * t * (3.0 - 2.0 * t));
 }
 
-void ClipToonCelEdge(float3 generated, float3 normalWS, float3 positionWS, bool frontFace, float hashScale)
+void ClipToonCelEdge(float3 generated, float3 normalWS, float3 positionWS, bool frontFace, float2 edgeUV, float hashScale)
 {
     // Derivatives must be taken in uniform control flow, before any clip.
-    float transparency = ToonCelEdgeTransparency(generated, normalWS, positionWS, frontFace);
+    float transparency = ToonCelEdgeTransparency(generated, normalWS, positionWS, frontFace, edgeUV);
     // Texture-blend mode: coverage stays the plain (anti-aliased) silhouette; the edge
     // opacity is written to the unfiltered colour texture's alpha instead.
     if (_LassylaEdgeBlend > 0.5)
@@ -69,14 +71,14 @@ void ClipToonCelEdge(float3 generated, float3 normalWS, float3 positionWS, bool 
 }
 
 // Centre-sample depth: in blend mode only reasonably solid pixels write depth.
-void ClipToonCelEdgeDepth(float3 generated, float3 normalWS, float3 positionWS, bool frontFace, float hashScale)
+void ClipToonCelEdgeDepth(float3 generated, float3 normalWS, float3 positionWS, bool frontFace, float2 edgeUV, float hashScale)
 {
     if (_LassylaEdgeBlend > 0.5)
     {
-        float opacity = ToonCelEdgeOpacity(ToonCelEdgeTransparency(generated, normalWS, positionWS, frontFace));
+        float opacity = ToonCelEdgeOpacity(ToonCelEdgeTransparency(generated, normalWS, positionWS, frontFace, edgeUV));
         clip(opacity - max(_EdgeBlendDepthCutoff, 1e-4));
         return;
     }
-    ClipToonCelEdge(generated, normalWS, positionWS, frontFace, hashScale);
+    ClipToonCelEdge(generated, normalWS, positionWS, frontFace, edgeUV, hashScale);
 }
 #endif

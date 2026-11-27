@@ -8,6 +8,14 @@ Shader "Custom/ToonCel"
         [Enum(UV0, 0, UV1, 1)] _BaseMapUV ("Base Map UV", Float) = 0
         [MainColor] _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
 
+        [Header(Painted Suit)]
+        [Toggle(_GWEN_PAINT)] _GwenPaint ("Enable Painted Suit", Float) = 0
+        [NoScaleOffset] _GwenShadeless ("Shadeless Brushwork (Screen)", 2D) = "black" {}
+        _GwenScreenStrength ("Shadeless Strength", Range(0, 1)) = 1
+        _GwenGrunge ("Projected Grunge (Multiply)", 2D) = "white" {}
+        _GwenGrungeStrength ("Projected Grunge Strength", Range(0, 1)) = 0.13
+        [HideInInspector] _GwenProjectionAnchor ("Projection Origin and Inverse Height", Vector) = (0,0,0,1)
+
         [Header(Normal Map)]
         [Normal] _BumpMap ("Normal Map", 2D) = "bump" {}
         _BumpScale ("Normal Strength", Range(0, 2)) = 1
@@ -59,6 +67,8 @@ Shader "Custom/ToonCel"
         _NoiseDistortion ("Edge Noise / Distortion", Float) = 0
         _EdgeStart ("Fresnel Ramp / Black Position", Range(0,1)) = 0
         _EdgeEnd ("Fresnel Ramp / White Position", Range(0,1)) = 0.3772728443145752
+        _EdgeTex ("Rim Texture (UV0, multiplied onto the rim)", 2D) = "white" {}
+        _EdgeTexStrength ("Rim Texture Strength (0 = ignore, 1 = full multiply)", Range(0,1)) = 1
         _NormalEdgeStrength ("Normal Difference Edge / Strength (0 = fresnel only, 1 = fresnel ∩ normal difference)", Range(0,1)) = 0
         _NormalEdgeStart ("Normal Difference Edge / Black Position (screen-space normal change)", Range(0,2)) = 0.05
         _NormalEdgeEnd ("Normal Difference Edge / White Position", Range(0,2)) = 0.3
@@ -105,6 +115,7 @@ Shader "Custom/ToonCel"
             #pragma shader_feature_local _CEL_THREE_TONE
             #pragma shader_feature_local _SHADE_FROM_AMBIENT
             #pragma shader_feature_local _PBR_SPECULAR
+            #pragma shader_feature_local_fragment _GWEN_PAINT
 
             #include "ToonCelForward.hlsl"
             ENDHLSL
@@ -132,6 +143,7 @@ Shader "Custom/ToonCel"
             #pragma shader_feature_local _CEL_THREE_TONE
             #pragma shader_feature_local _SHADE_FROM_AMBIENT
             #pragma shader_feature_local _PBR_SPECULAR
+            #pragma shader_feature_local_fragment _GWEN_PAINT
 
             #define TOON_LASSYLA_COLOUR 1
             #include "ToonCelForward.hlsl"
