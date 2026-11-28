@@ -11,8 +11,7 @@ Material:
   m_Shader: {fileID: 4800000, guid: 5da87cff121e2d6468645199ab8257f3, type: 3}
   m_Parent: {fileID: 2100000, guid: 044faa0751c3db945aeb20ce7d911191, type: 2}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - _OUTPUT_STRIPE
+  m_ValidKeywords: []
   m_InvalidKeywords:
   - _ADDITIONAL_RAMP
   - _RAMP_TEXTURE

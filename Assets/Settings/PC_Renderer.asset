@@ -19,6 +19,7 @@ MonoBehaviour:
       m_Bits: 64
     bloomThreshold: 0.66
     bloomKnee: 0
+    glowEnabled: 1
     intensity: 4.1
     blurAmount: 0.005
     baseUVOffset: {x: 0, y: 0.02}
@@ -37,11 +38,6 @@ MonoBehaviour:
     downsample: 2
     glitchEnabled: 1
     glitchMode: 1
-    rgbBurstFrequency: 1.5
-    rgbBurstDuration: 0.18
-    rgbFlickerSpeed: 24
-    rgbRedOffset: {x: 0.012, y: 0.002}
-    rgbBlueOffset: {x: -0.012, y: -0.002}
     glitchOpacity: 0.7
     glitchDisplacement: 0.025
     glitchRGBSplit: 0.003
@@ -51,6 +47,29 @@ MonoBehaviour:
     glitchUpdatesPerSecond: 12
     glitchEchoOpacity: 0.3
     glitchSeed: 1
+    rgbNoiseTexture: {fileID: 0}
+    rgbNoiseSpeed: {x: 0.17, y: 0.11}
+    rgbBlueTickOffset: 3
+    rgbGateTexture: {fileID: 0}
+    rgbGateSpeed: {x: 0.2, y: 0.13}
+    rgbGateThreshold: 0.5
+    rgbRedOffset: {x: 0.012, y: 0.002}
+    rgbBlueOffset: {x: -0.012, y: -0.002}
+    rgbOutsideOnly: 0
+    rgbRedColor: {r: 1, g: 0, b: 0, a: 1}
+    rgbBlueColor: {r: 0, g: 0, b: 1, a: 1}
+    noiseTexture: {fileID: 0}
+    noiseST: {x: 1, y: 1, z: 0, w: 0}
+    noiseDisplacement: 0.03
+    noiseHueShift: 1
+    noiseScrollPerTick: {x: 0.05, y: 0}
+    noiseTexture2: {fileID: 0}
+    noiseTexture3: {fileID: 0}
+    noiseTiling3: 1
+    noiseScroll3PerTick: {x: 0.05, y: 0}
+    noiseST2: {x: 1, y: 1, z: 0, w: 0}
+    noiseSpeed2: {x: 0.1, y: 0.1}
+    noiseMultiplyStrength: 1
     renderPassEvent: 550
     shader: {fileID: 4800000, guid: ddccd344c5ca4127a6f10df2a6790dca, type: 3}
 --- !u!114 &-7856576758182827068

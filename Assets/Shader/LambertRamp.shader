@@ -34,6 +34,7 @@ Shader "Custom/LambertRamp"
         // stay level and stick to the body through animation / movement.
         [NoScaleOffset] _StripeLambertRampMap ("Stripe Step 1: Lambert Ramp (U = normalized lambert)", 2D) = "white" {}
         [NoScaleOffset] _StripeRampMap ("Stripe Step 4: Final Ramp (U = lambert x stripe)", 2D) = "white" {}
+        _StripeStrength ("Stripe Strength (multiplied onto the final colour, 0 = off)", Range(0, 1)) = 0
         _StripeDensity ("Stripe Density (stripes per metre)", Float) = 20
         _StripeWidth ("Stripe Width (fraction of one period)", Range(0, 1)) = 0.5
         _StripeSoftness ("Stripe Softness", Range(0, 0.5)) = 0.0
@@ -111,6 +112,7 @@ Shader "Custom/LambertRamp"
             float4 _Rim2Map_ST;
             half   _Rim2MapUV;
             half   _Rim2MapStrength;
+            half   _StripeStrength;
             float  _StripeDensity;
             half   _StripeWidth;
             half   _StripeSoftness;
@@ -208,8 +210,15 @@ Shader "Custom/LambertRamp"
                 return half4(pureLambert.xxx, 1);   // no gradient / blend / rim
             #endif
 
+                // Height stripe layer (see steps below). Preview shows it alone; otherwise it is
+                // multiplied onto the final colour by _StripeStrength (0 = off, nothing else changes).
+                half3 stripeMul = half3(1, 1, 1);
             #if defined(_OUTPUT_STRIPE)
-                // Preview only: separate Lambert ramp x height stripes. Nothing below is touched.
+                const bool doStripe = true;
+            #else
+                bool doStripe = _StripeStrength > 0.0h;
+            #endif
+                if (doStripe)
                 {
                     float sh = (input.stripeH + _StripeOffset) * _StripeDensity;
                     float dist = abs(frac(sh) - 0.5);                  // 0 at stripe centre line, 0.5 at the gap
@@ -231,9 +240,11 @@ Shader "Custom/LambertRamp"
                     half stripeLit = saturate(stripe + rimMask);
                     // 3) Multiply, then 4) map through the final ramp.
                     half3 finalRamp = SAMPLE_TEXTURE2D_LOD(_StripeRampMap, sampler_LinearClamp, float2(lambertLit * stripeLit, 0.5), 0).rgb;
-                    return half4(finalRamp, 1);
+                #if defined(_OUTPUT_STRIPE)
+                    return half4(finalRamp, 1);   // preview: the stripe layer only
+                #endif
+                    stripeMul = lerp(half3(1, 1, 1), finalRamp, _StripeStrength);
                 }
-            #endif
 
                 half3 ramp = SAMPLE_TEXTURE2D_LOD(_RampMap, sampler_LinearClamp, float2(lambert, 0.5), 0).rgb;
 
@@ -295,6 +306,10 @@ Shader "Custom/LambertRamp"
                 half rim2Tex = SAMPLE_TEXTURE2D(_Rim2Map, sampler_Rim2Map, input.rim2UV).r;
                 rim2 *= lerp(1.0h, rim2Tex, _Rim2MapStrength);
                 color += _Rim2Color.rgb * rim2 * _Rim2Intensity;
+
+                // Stripe layer multiplied onto the shaded colour. Applied before the solid mask,
+                // so solid-colour areas are never affected by it.
+                color *= stripeMul;
 
                 // Solid colour mask: where white, output only SolidColor x base colour (no shading / blend / rim)
                 half solid = SAMPLE_TEXTURE2D(_SolidMask, sampler_SolidMask, input.solidUV).r;
