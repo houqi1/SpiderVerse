@@ -1,5 +1,51 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!28 &-8886605212850537072
+Texture2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: StripeLambertRampGradient
+  m_ImageContentsHash:
+    serializedVersion: 2
+    Hash: 00000000000000000000000000000000
+  m_IsAlphaChannelOptional: 0
+  serializedVersion: 3
+  m_Width: 256
+  m_Height: 1
+  m_CompleteImageSize: 1024
+  m_MipsStripped: 0
+  m_TextureFormat: 4
+  m_MipCount: 1
+  m_IsReadable: 1
+  m_IsPreProcessed: 0
+  m_IgnoreMipmapLimit: 1
+  m_MipmapLimitGroupName: 
+  m_StreamingMipmaps: 0
+  m_StreamingMipmapsPriority: 0
+  m_VTOnly: 0
+  m_AlphaIsTransparency: 0
+  m_ImageCount: 1
+  m_TextureDimension: 2
+  m_TextureSettings:
+    serializedVersion: 2
+    m_FilterMode: 1
+    m_Aniso: 0
+    m_MipBias: 0
+    m_WrapU: 1
+    m_WrapV: 1
+    m_WrapW: 1
+  m_LightmapFormat: 0
+  m_ColorSpace: 1
+  m_PlatformBlob: 
+  image data: 1024
+  _typelessdata: 4d4d66ff4d4d67ff4e4e67ff4f4f68ff4f4f68ff505069ff51516aff51516aff52526bff53536bff54546cff54546dff55556dff56566eff56566eff57576fff585870ff585870ff595971ff5a5a71ff5b5b72ff5b5b73ff5c5c73ff5d5d74ff5d5d74ff5e5e75ff5f5f76ff5f5f76ff606077ff616177ff626278ff626279ff636379ff64647aff64647aff65657bff66667cff66667cff67677dff68687dff69697eff69697fff6a6a7fff6b6b80ff6b6b80ff6c6c81ff6d6d82ff6d6d82ff6e6e83ff6f6f83ff707084ff707085ff717185ff727286ff727286ff737387ff747488ff747488ff757589ff767689ff77778aff77778bff78788bff79798cff79798cff7a7a8dff7b7b8eff7b7b8eff7c7c8fff7d7d8fff7e7e90ff7e7e91ff7f7f91ff808092ff808092ff818193ff828294ff828294ff838395ff848495ff858596ff858597ff868697ff878798ff878798ff888899ff89899aff89899aff8a8a9bff8b8b9bff8c8c9cff8c8c9dff8d8d9dff8e8e9eff8e8e9eff8f8f9fff9090a0ff9090a0ff9191a1ff9292a1ff9393a2ff9393a3ff9494a3ff9595a4ff9595a4ff9696a5ff9797a6ff9797a6ff9898a7ff9999a7ff9a9aa8ff9a9aa9ff9b9ba9ff9c9caaff9c9caaff9d9dabff9e9eacff9e9eacff9f9fadffa0a0adffa1a1aeffa1a1afffa2a2afffa3a3b0ffa3a3b0ffa4a4b1ffa5a5b2ffa5a5b2ffa6a6b3ffa7a7b3ffa8a8b4ffa8a8b5ffa9a9b5ffaaaab6ffaaaab6ffababb7ffacacb8ffacacb8ffadadb9ffaeaeb9ffafafbaffafafbbffb0b0bbffb1b1bcffb1b1bcffb2b2bdffb3b3beffb3b3beffb4b4bfffb5b5bfffb6b6c0ffb6b6c1ffb7b7c1ffb8b8c2ffb8b8c2ffb9b9c3ffbabac4ffbabac4ffbbbbc5ffbcbcc5ffbdbdc6ffbdbdc7ffbebec7ffbfbfc8ffbfbfc8ffc0c0c9ffc1c1caffc1c1caffc2c2cbffc3c3cbffc4c4ccffc4c4cdffc5c5cdffc6c6ceffc6c6ceffc7c7cfffc8c8d0ffc8c8d0ffc9c9d1ffcacad1ffcbcbd2ffcbcbd3ffccccd3ffcdcdd4ffcdcdd4ffceced5ffcfcfd6ffcfcfd6ffd0d0d7ffd1d1d7ffd2d2d8ffd2d2d9ffd3d3d9ffd4d4daffd4d4daffd5d5dbffd6d6dcffd6d6dcffd7d7ddffd8d8ddffd9d9deffd9d9dfffdadadfffdbdbe0ffdbdbe0ffdcdce1ffdddde2ffdddde2ffdedee3ffdfdfe3ffe0e0e4ffe0e0e5ffe1e1e5ffe2e2e6ffe2e2e6ffe3e3e7ffe4e4e8ffe4e4e8ffe5e5e9ffe6e6e9ffe7e7eaffe7e7ebffe8e8ebffe9e9ecffe9e9ecffeaeaedffebebeeffebebeeffececefffededefffeeeef0ffeeeef1ffefeff1fff0f0f2fff0f0f2fff1f1f3fff2f2f4fff2f2f4fff3f3f5fff4f4f5fff5f5f6fff5f5f7fff6f6f7fff7f7f8fff7f7f8fff8f8f9fff9f9fafff9f9fafffafafbfffbfbfbfffcfcfcfffcfcfdfffdfdfdfffefefefffefefeffffffffff
+  m_StreamData:
+    serializedVersion: 2
+    offset: 0
+    size: 0
+    path: 
 --- !u!21 &2100000
 Material:
   serializedVersion: 8
@@ -11,7 +57,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: 5da87cff121e2d6468645199ab8257f3, type: 3}
   m_Parent: {fileID: 2100000, guid: 044faa0751c3db945aeb20ce7d911191, type: 2}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _OUTPUT_STRIPE
   m_InvalidKeywords:
   - _ADDITIONAL_RAMP
   - _RAMP_TEXTURE
@@ -20,15 +67,25 @@ Material:
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: -1
-  stringTagMap: {}
+  stringTagMap:
+    LambertRampStripeLambertGradient: '{"mode":0,"colors":[{"t":0.0,"r":0.30000001192092898,"g":0.30000001192092898,"b":0.4000000059604645,"a":0.0},{"t":1.0,"r":1.0,"g":1.0,"b":1.0,"a":0.0}],"alphas":[{"t":0.0,"r":0.0,"g":0.0,"b":0.0,"a":1.0},{"t":1.0,"r":0.0,"g":0.0,"b":0.0,"a":1.0}]}'
   disabledShaderPasses: []
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs: []
+    m_TexEnvs:
+    - _SolidMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _StripeLambertRampMap:
+        m_Texture: {fileID: -8886605212850537072}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats: []
-    m_Colors: []
+    m_Colors:
+    - _SolidColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!28 &2400606487857433486

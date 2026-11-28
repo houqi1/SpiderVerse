@@ -10,6 +10,7 @@ Shader "Custom/LambertRamp"
 
         [Header(Debug)]
         [Toggle(_OUTPUT_NORMAL)] _OutputNormal ("Output World Normal", Float) = 0
+        [Toggle(_OUTPUT_STRIPE)] _OutputStripe ("Output Stripe Preview (stripe ramp of Lambert x stripes, ignore all other effects)", Float) = 0
         [Toggle(_OUTPUT_LAMBERT)] _OutputLambert ("Output Pure Lambert (ignore all other effects)", Float) = 0
 
         [Header(Gradient)]
@@ -27,6 +28,20 @@ Shader "Custom/LambertRamp"
         [Header(Solid Color Mask)]
         _SolidMask ("Solid Mask (R channel, white = solid colour)", 2D) = "black" {}
         _SolidColor ("Solid Color (x base colour)", Color) = (1, 1, 1, 1)
+
+        [Header(Height Stripes)]
+        // Uses TEXCOORD3.y = bind-pose height (written by BindPoseHeightPostprocessor), so stripes
+        // stay level and stick to the body through animation / movement.
+        [NoScaleOffset] _StripeLambertRampMap ("Stripe Step 1: Lambert Ramp (U = normalized lambert)", 2D) = "white" {}
+        [NoScaleOffset] _StripeRampMap ("Stripe Step 4: Final Ramp (U = lambert x stripe)", 2D) = "white" {}
+        _StripeDensity ("Stripe Density (stripes per metre)", Float) = 20
+        _StripeWidth ("Stripe Width (fraction of one period)", Range(0, 1)) = 0.5
+        _StripeSoftness ("Stripe Softness", Range(0, 0.5)) = 0.0
+        _StripeOffset ("Stripe Offset (metres)", Float) = 0
+        _StripeFresnelAmount ("Stripe Fresnel / Rim Amount (rim light added to both the Lambert ramp and the stripes)", Range(0, 1)) = 1
+        _StripeFresnelPower ("Stripe Fresnel / Power (higher = thinner)", Range(0.5, 10)) = 2
+        _StripeFresnelThreshold ("Stripe Fresnel / Threshold (lower = stripes removed over a wider edge)", Range(0, 1)) = 0.4
+        _StripeFresnelSmooth ("Stripe Fresnel / Smoothness", Range(0.01, 1)) = 0.2
 
         [Header(Rim Light)]
         _RimColor ("Rim Color", Color) = (1, 1, 1, 1)
@@ -60,6 +75,8 @@ Shader "Custom/LambertRamp"
 
         TEXTURE2D(_BaseMap);    SAMPLER(sampler_BaseMap);
         TEXTURE2D(_RampMap);
+        TEXTURE2D(_StripeLambertRampMap);
+        TEXTURE2D(_StripeRampMap);
         TEXTURE2D(_MaskMap);    SAMPLER(sampler_MaskMap);
         TEXTURE2D(_ColorMaskMap); SAMPLER(sampler_ColorMaskMap);
         TEXTURE2D(_SolidMask);  SAMPLER(sampler_SolidMask);
@@ -94,6 +111,14 @@ Shader "Custom/LambertRamp"
             float4 _Rim2Map_ST;
             half   _Rim2MapUV;
             half   _Rim2MapStrength;
+            float  _StripeDensity;
+            half   _StripeWidth;
+            half   _StripeSoftness;
+            float  _StripeOffset;
+            half   _StripeFresnelAmount;
+            half   _StripeFresnelPower;
+            half   _StripeFresnelThreshold;
+            half   _StripeFresnelSmooth;
         CBUFFER_END
         ENDHLSL
 
@@ -112,6 +137,7 @@ Shader "Custom/LambertRamp"
             #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
             #pragma shader_feature_local_fragment _OUTPUT_NORMAL
             #pragma shader_feature_local_fragment _OUTPUT_LAMBERT
+            #pragma shader_feature_local_fragment _OUTPUT_STRIPE
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -121,6 +147,7 @@ Shader "Custom/LambertRamp"
                 float3 normalOS   : NORMAL;
                 float2 uv         : TEXCOORD0;
                 float2 uv1        : TEXCOORD1;
+                float3 uv3        : TEXCOORD3; // y = bind-pose height (UV3)
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -135,6 +162,7 @@ Shader "Custom/LambertRamp"
                 float2 solidUV    : TEXCOORD5;
                 float2 rimUV      : TEXCOORD6;
                 float2 rim2UV     : TEXCOORD7;
+                float  stripeH    : TEXCOORD8;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -154,9 +182,10 @@ Shader "Custom/LambertRamp"
                 o.uv         = TRANSFORM_TEX(baseUV, _BaseMap);
                 o.maskUV     = TRANSFORM_TEX(baseUV, _MaskMap);
                 o.colorMaskUV = TRANSFORM_TEX(baseUV, _ColorMaskMap);
-                o.solidUV    = TRANSFORM_TEX(baseUV, _SolidMask);
+                o.solidUV    = TRANSFORM_TEX(input.uv, _SolidMask);   // always UV0
                 o.rimUV      = TRANSFORM_TEX(lerp(input.uv, input.uv1, saturate(_RimMapUV)), _RimMap);
-                o.rim2UV     = TRANSFORM_TEX(lerp(input.uv, input.uv1, saturate(_Rim2MapUV)), _Rim2Map);
+                o.stripeH    = input.uv3.y;
+                o.rim2UV     =TRANSFORM_TEX(lerp(input.uv, input.uv1, saturate(_Rim2MapUV)), _Rim2Map);
                 return o;
             }
 
@@ -178,6 +207,34 @@ Shader "Custom/LambertRamp"
                 half pureLambert = saturate(dot(normalWS, mainLight.direction));   // plain N.L, no 0.5 remap
                 return half4(pureLambert.xxx, 1);   // no gradient / blend / rim
             #endif
+
+            #if defined(_OUTPUT_STRIPE)
+                // Preview only: separate Lambert ramp x height stripes. Nothing below is touched.
+                {
+                    float sh = (input.stripeH + _StripeOffset) * _StripeDensity;
+                    float dist = abs(frac(sh) - 0.5);                  // 0 at stripe centre line, 0.5 at the gap
+                    float half_w = 0.5 * _StripeWidth;
+                    float aa = fwidth(sh) * 0.5 + _StripeSoftness * 0.5;
+                    half stripe = 1.0h - (half)smoothstep(half_w - aa, half_w + aa, dist);   // 1 = stripe, 0 = gap
+
+                    // Stripe-only fresnel: remove stripes towards the silhouette.
+                    half3 stripeViewDir = normalize(GetWorldSpaceViewDir(input.positionWS));
+                    half stripeFres = pow(1.0 - saturate(dot(normalWS, stripeViewDir)), _StripeFresnelPower);
+                    half stripeEdge = smoothstep(max(_StripeFresnelThreshold - _StripeFresnelSmooth, 0.0),
+                                                 _StripeFresnelThreshold + _StripeFresnelSmooth, stripeFres);
+                    half rimMask = stripeEdge * _StripeFresnelAmount;   // 1 at the silhouette
+
+                    // 1) Ramp the Lambert, then add the rim light.
+                    half3 lambertRamp = SAMPLE_TEXTURE2D_LOD(_StripeLambertRampMap, sampler_LinearClamp, float2(lambert, 0.5), 0).rgb;
+                    half lambertLit = saturate(dot(lambertRamp, half3(0.299h, 0.587h, 0.114h)) + rimMask);
+                    // 2) Stripes with the same rim light added (the edge turns white).
+                    half stripeLit = saturate(stripe + rimMask);
+                    // 3) Multiply, then 4) map through the final ramp.
+                    half3 finalRamp = SAMPLE_TEXTURE2D_LOD(_StripeRampMap, sampler_LinearClamp, float2(lambertLit * stripeLit, 0.5), 0).rgb;
+                    return half4(finalRamp, 1);
+                }
+            #endif
+
                 half3 ramp = SAMPLE_TEXTURE2D_LOD(_RampMap, sampler_LinearClamp, float2(lambert, 0.5), 0).rgb;
 
                 // Intensity map (R) x strength = how far the base colour moves;
